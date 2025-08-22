@@ -289,7 +289,6 @@
   const fromHash = url.hash ? Object.fromEntries(new URLSearchParams(url.hash.slice(1))) : {};
   const saved = JSON.parse(localStorage.getItem('ambience:v2')||'{}');
   Object.assign(state, saved);
-  // Allow hash overrides for quick sharing (backwards-compatible keys)
   if (Object.keys(fromHash).length){
     state.season = fromHash.season || state.season;
     state.intensity = Number(fromHash.intensity ?? state.intensity);
@@ -298,7 +297,6 @@
     state.sounds.rain = fromHash.rain==='1' || state.sounds.rain;
     state.sounds.fire = fromHash.fire==='1' || state.sounds.fire;
     state.sounds.wind = fromHash.wind==='1' || state.sounds.wind;
-    // volumes
     if (fromHash.vr) state.volumes.rain = +fromHash.vr;
     if (fromHash.vf) state.volumes.fire = +fromHash.vf;
     if (fromHash.vw) state.volumes.wind = +fromHash.vw;
@@ -310,9 +308,12 @@
   // --------------------------
   const sceneCanvas = $('#scene');
   const fireCanvas  = $('#fireplace');
-  const ctx = sceneCanvas.getContext('2d'); // transparent
-  const fctx = fireCanvas.getContext('2d'); // transparent
+  const ctx = sceneCanvas.getContext('2d');
+  const fctx = fireCanvas.getContext('2d');
   let DPR = Math.max(1, Math.min(2, (window.devicePixelRatio || 1)));
+
+  // 🔧 Hotfix: declare fireField BEFORE fit() references it.
+  let fireField; // will be assigned later
 
   const fit = () => {
     const w = innerWidth, h = innerHeight;
@@ -321,8 +322,8 @@
       c.height = Math.floor(h * DPR);
       c.style.width = w+'px'; c.style.height = h+'px';
     }
-    // reset caches that depend on size
-    fireField.resize();
+    // Guard: only call after fireField is created
+    if (fireField && fireField.resize) fireField.resize();
   };
   fit();
   addEventListener('resize', fit);
@@ -331,7 +332,6 @@
   // Background image helpers
   // --------------------------
   function applyBackground(){
-    // CSS variables
     $('#bg').style.setProperty('--bg-image', state.bg.src ? `url("${state.bg.src}")` : 'none');
     $('#bg').style.setProperty('--bg-fit', state.bg.fit);
     $('#bg').style.setProperty('--bg-bright', (state.bg.bright/100).toFixed(2));
@@ -344,30 +344,10 @@
   // Season visuals configuration
   // --------------------------
   const settings = {
-    winter: {
-      label: "Winter ❄️",
-      supportsFireplace: true,
-      tint: [210, "16%", "10%"], // bluish
-      baseRate: 0.6
-    },
-    fall: {
-      label: "Fall 🍂",
-      supportsFireplace: true,
-      tint: [26, "24%", "10%"],  // warm
-      baseRate: 0.45
-    },
-    spring: {
-      label: "Spring 🌸",
-      supportsFireplace: false,
-      tint: [120, "18%", "10%"], // greenish
-      baseRate: 0.5
-    },
-    summer: {
-      label: "Summer 🌙",
-      supportsFireplace: false,
-      tint: [210, "10%", "8%"],  // night cool
-      baseRate: 0.22
-    }
+    winter: { label: "Winter ❄️", supportsFireplace: true,  tint: [210, "16%", "10%"], baseRate: 0.6 },
+    fall:   { label: "Fall 🍂",   supportsFireplace: true,  tint: [26,  "24%", "10%"], baseRate: 0.45 },
+    spring: { label: "Spring 🌸", supportsFireplace: false, tint: [120, "18%", "10%"], baseRate: 0.5 },
+    summer: { label: "Summer 🌙", supportsFireplace: false, tint: [210, "10%", "8%"],  baseRate: 0.22 }
   };
 
   function applySeasonTint(){
@@ -378,86 +358,47 @@
   }
 
   // --------------------------
-  // Particles: Snow (improved), Leaves, Petals, Fireflies, Rain
+  // Particles: Snow, Leaves, Petals, Fireflies, Rain
   // --------------------------
   let lastTime = performance.now();
   let particles = [];     // leaves, petals, fireflies
   let flakes = [];        // winter snowflakes
   let raindrops = [];     // rain streaks
   let splashes = [];      // rain ripples
-  let fireEmbers = [];    // extra embers floating up
+  let fireEmbers = [];    // extra embers
 
-  // Gusty wind (shared)
-  function gust(t){
-    return Math.sin(t*0.00023)*0.9 + Math.sin(t*0.00013+1.7)*0.6; // -1.5..1.5-ish
-  }
+  function gust(t){ return Math.sin(t*0.00023)*0.9 + Math.sin(t*0.00013+1.7)*0.6; }
 
-  // Pre-rendered flake sprites (hex, star, dot)
+  // --- Snow (pre-rendered sprites)
   const flakeSprites = [];
   function makeFlakeSprites(){
     if (flakeSprites.length) return;
     const defs = [
-      (c,s)=>{ // hex
-        const r = s/2;
-        c.translate(r,r);
-        c.beginPath();
-        for(let i=0;i<6;i++){
-          const a = i*(Math.PI/3);
-          c.lineTo(Math.cos(a)*r, Math.sin(a)*r);
-        }
-        c.closePath();
-        c.fill();
-      },
-      (c,s)=>{ // star
-        const r1=s*0.45, r2=s*0.18;
-        c.translate(s/2,s/2);
-        c.beginPath();
-        for(let i=0;i<12;i++){
-          const r = (i%2)? r2 : r1;
-          const a = i*(Math.PI/6);
-          c.lineTo(Math.cos(a)*r, Math.sin(a)*r);
-        }
-        c.closePath();
-        c.fill();
-      },
-      (c,s)=>{ // dot
-        c.beginPath(); c.arc(s/2,s/2,s/2,0,TWO_PI); c.fill();
-      }
+      (c,s)=>{ const r=s/2; c.translate(r,r); c.beginPath(); for(let i=0;i<6;i++){ const a=i*(Math.PI/3); c.lineTo(Math.cos(a)*r, Math.sin(a)*r);} c.closePath(); c.fill(); },
+      (c,s)=>{ const r1=s*0.45, r2=s*0.18; c.translate(s/2,s/2); c.beginPath(); for(let i=0;i<12;i++){ const r=(i%2)?r2:r1; const a=i*(Math.PI/6); c.lineTo(Math.cos(a)*r, Math.sin(a)*r);} c.closePath(); c.fill(); },
+      (c,s)=>{ c.beginPath(); c.arc(s/2,s/2,s/2,0,Math.PI*2); c.fill(); }
     ];
     for (let i=0;i<defs.length;i++){
-      const s = 24;
-      const off = document.createElement('canvas'); off.width = off.height = s;
-      const oc = off.getContext('2d');
-      oc.fillStyle = 'rgba(255,255,255,0.95)';
-      oc.shadowColor = 'rgba(255,255,255,0.45)';
-      oc.shadowBlur = 6;
-      defs[i](oc, s);
-      flakeSprites.push(off);
+      const s = 24, off = document.createElement('canvas'); off.width = off.height = s;
+      const oc = off.getContext('2d'); oc.fillStyle = 'rgba(255,255,255,0.95)'; oc.shadowColor='rgba(255,255,255,0.45)'; oc.shadowBlur=6;
+      defs[i](oc, s); flakeSprites.push(off);
     }
   }
   makeFlakeSprites();
 
   function makeFlake(w,h,t){
-    const z = Math.random(); // depth 0..1 (front)
-    const size = lerp(0.6, 3.6, Math.pow(z, 0.7)) * DPR;
-    return {
-      x: Math.random()*w, y: -10*DPR,
-      z, r: size,
-      vy: lerp(20, 110, Math.pow(z,0.65)),
-      vx: 0,
-      phase: Math.random()*TWO_PI,
-      spin: (Math.random()<0.5?-1:1)* (0.006 + Math.random()*0.012),
-      sprite: flakeSprites[(Math.random()*flakeSprites.length)|0],
-      alpha: 0.85 + Math.random()*0.15
-    };
+    const z = Math.random();
+    const size = (0.6 + Math.random()*3.0) * DPR;
+    return { x: Math.random()*w, y: -10*DPR, z, r: size, vy: 20+Math.random()*90, vx: 0,
+             phase: Math.random()*Math.PI*2, spin: (Math.random()<0.5?-1:1)*(0.006+Math.random()*0.012),
+             sprite: flakeSprites[(Math.random()*flakeSprites.length)|0], alpha: 0.85 + Math.random()*0.15 };
   }
   function updateDrawSnow(dt, t, w, h){
     const target = Math.floor((state.intensity/100) * 450 *
       (window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.6 : 1));
     while (flakes.length < target) flakes.push(makeFlake(w,h,t));
     while (flakes.length > target) flakes.pop();
-
-    const g = gust(t); // -something..+
+    const g = gust(t);
     for (let i=flakes.length-1;i>=0;i--){
       const p = flakes[i];
       p.phase += p.spin*dt;
@@ -472,25 +413,15 @@
     }
   }
 
-  // Leaves / Petals / Fireflies (same as before but kept concise)
+  // Leaves / Petals / Fireflies
   const leafPalette = ['#d1782c','#c45508','#8b3e07','#aa6b24','#b05a2a'];
   const petalPalette = ['#ffd4e0','#ffc6da','#ffe2ea','#ffd8f1','#fff0f5'];
-  function makeLeaf(w){ return {
-    kind:'leaf', x: Math.random()*w, y: -60*DPR,
-    s: (6+Math.random()*10)*DPR, vy: 30+Math.random()*65, rot: Math.random()*TWO_PI,
-    rotSpd: -0.02+Math.random()*0.04, col: leafPalette[(Math.random()*leafPalette.length)|0],
-    alpha: 0.7+Math.random()*0.28
-  }; }
-  function makePetal(w){ return {
-    kind:'petal', x: Math.random()*w, y: -60*DPR,
-    w: (6+Math.random()*8)*DPR, h: (3+Math.random()*4)*DPR, vy: 24+Math.random()*48,
-    rot: Math.random()*TWO_PI, rotSpd: -0.03+Math.random()*0.06,
-    col: petalPalette[(Math.random()*petalPalette.length)|0], alpha: 0.75+Math.random()*0.22
-  }; }
-  function makeFirefly(w,h){ return {
-    kind:'firefly', x: Math.random()*w, y: Math.random()*h*0.85,
-    r: (1.8+Math.random()*1.6)*DPR, phase: Math.random()*TWO_PI, speed: 6+Math.random()*10, dir: Math.random()*TWO_PI
-  }; }
+  function makeLeaf(w){ return { kind:'leaf', x: Math.random()*w, y: -60*DPR, s: (6+Math.random()*10)*DPR, vy: 30+Math.random()*65,
+                                 rot: Math.random()*TWO_PI, rotSpd: -0.02+Math.random()*0.04, col: leafPalette[(Math.random()*leafPalette.length)|0], alpha: 0.7+Math.random()*0.28 }; }
+  function makePetal(w){ return { kind:'petal', x: Math.random()*w, y: -60*DPR, w: (6+Math.random()*8)*DPR, h: (3+Math.random()*4)*DPR,
+                                  vy: 24+Math.random()*48, rot: Math.random()*TWO_PI, rotSpd: -0.03+Math.random()*0.06, col: petalPalette[(Math.random()*petalPalette.length)|0], alpha: 0.75+Math.random()*0.22 }; }
+  function makeFirefly(w,h){ return { kind:'firefly', x: Math.random()*w, y: Math.random()*h*0.85, r: (1.8+Math.random()*1.6)*DPR,
+                                      phase: Math.random()*TWO_PI, speed: 6+Math.random()*10, dir: Math.random()*TWO_PI }; }
 
   function updateDrawSeason(dt,t,w,h){
     const baseRate = settings[state.season].baseRate;
@@ -500,7 +431,7 @@
       if (state.season==='fall') particles.push(makeLeaf(w));
       else if (state.season==='spring') particles.push(makePetal(w));
       else if (state.season==='summer') particles.push(makeFirefly(w,h));
-      else break; // winter handled by snow
+      else break;
     }
     while (particles.length > target) particles.pop();
 
@@ -534,9 +465,9 @@
     }
   }
 
-  // Rain (streaks + splashes)
+  // --- Rain (streaks + splashes)
   function makeDrop(w){
-    const speed = (600 + Math.random()*400) * DPR; // px/s at DPR
+    const speed = (600 + Math.random()*400) * DPR;
     const len = 10 + Math.random()*18;
     return { x: Math.random()*w, y: -20*DPR, vx: 0, vy: speed, len, alpha: 0.5+Math.random()*0.4 };
   }
@@ -548,27 +479,22 @@
       (window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.6 : 1)) : 0;
     while (raindrops.length < rainTarget) raindrops.push(makeDrop(w));
     while (raindrops.length > rainTarget) raindrops.pop();
-
-    const wind = gust(t) * 220; // px/s sideways
+    const wind = gust(t) * 220;
     ctx.lineWidth = Math.max(1, 1.2*DPR);
     ctx.strokeStyle = 'rgba(200, 220, 255, 0.6)';
     ctx.lineCap = 'round';
-
     for (let i=raindrops.length-1;i>=0;i--){
       const d = raindrops[i];
       d.vx = wind;
       const dx = d.vx * dt/1000;
       const dy = d.vy * dt/1000;
-      // draw streak
       ctx.globalAlpha = d.alpha;
       ctx.beginPath();
       ctx.moveTo(d.x, d.y);
       ctx.lineTo(d.x + dx*0.2, d.y + dy*0.2 + d.len*DPR);
       ctx.stroke();
       ctx.globalAlpha = 1;
-
       d.x += dx; d.y += dy;
-      // splash near bottom 15% of screen
       const ground = h*0.85;
       if (d.y > ground){
         splashes.push(makeSplash(d.x, ground + Math.random()*6));
@@ -577,8 +503,6 @@
         raindrops.splice(i,1);
       }
     }
-
-    // draw splashes
     for (let i=splashes.length-1;i>=0;i--){
       const s = splashes[i];
       s.r += (50 + Math.random()*80) * dt/1000 * DPR;
@@ -595,26 +519,20 @@
   // --------------------------
   // Fireplace (noise-based flame + embers)
   // --------------------------
-  const fireField = (() => {
-    // Small offscreen field, scaled up with smoothing
+  fireField = (() => {
     let off = document.createElement('canvas');
     let oc = off.getContext('2d', { willReadFrequently: true });
-    let ow = 96, oh = 160; // logical tex size
+    let ow = 96, oh = 160;
     let t = 0;
 
     function resize(){
-      // keep offscreen small for perf
       off.width = ow; off.height = oh;
       oc.imageSmoothingEnabled = true;
       oc.globalCompositeOperation = 'source-over';
     }
     resize();
 
-    function hash(x, y){
-      // cheap deterministic hash in [0,1]
-      const s = Math.sin(x*127.1 + y*311.7)*43758.5453;
-      return (s - Math.floor(s));
-    }
+    function hash(x, y){ const s = Math.sin(x*127.1 + y*311.7)*43758.5453; return (s - Math.floor(s)); }
     function smooth(t){ return t*t*(3-2*t); }
     function valueNoise(x, y){
       const xi = Math.floor(x), yi = Math.floor(y);
@@ -628,37 +546,28 @@
     }
     function fbm(x, y, oct=4){
       let val=0, amp=0.5, freq=1;
-      for (let i=0;i<oct;i++){
-        val += amp*valueNoise(x*freq, y*freq);
-        freq *= 2; amp *= 0.5;
-      }
+      for (let i=0;i<oct;i++){ val += amp*valueNoise(x*freq, y*freq); freq *= 2; amp *= 0.5; }
       return val;
     }
 
     function step(dt){
-      t += dt*0.0012; // rise speed
+      t += dt*0.0012;
       const img = oc.getImageData(0,0,ow,oh);
       const data = img.data;
-      // paint flames bottom-up
       for (let j=0;j<oh;j++){
-        const v = j/oh; // 0..1 from top to bottom
+        const v = j/oh;
         for (let i=0;i<ow;i++){
           const u = i/ow;
-          // noise field that moves upward
           const n = fbm(u*3 + Math.sin(t)*0.1, (v*3 - t), 5);
-          const shape = Math.max(0, 1 - Math.pow(v, 1.7)); // more at base, decay upward
+          const shape = Math.max(0, 1 - Math.pow(v, 1.7));
           const heat = Math.max(0, Math.min(1, Math.pow(n, 1.9) * shape));
-          // color ramp (dark -> red -> orange -> yellow -> white)
           let r,g,b,a;
           if (heat < 0.25){ r=40; g=10; b=0; a=heat*0.8; }
-          else if (heat < 0.45){ const k=(heat-0.25)/0.2; r=lerp(80,160,k); g=lerp(20,40,k); b=lerp(0,0,k); a=0.55+0.3*k; }
-          else if (heat < 0.7){ const k=(heat-0.45)/0.25; r=lerp(160,230,k); g=lerp(60,110,k); b=lerp(10,20,k); a=0.7+0.2*k; }
-          else { const k=(heat-0.7)/0.3; r=lerp(230,255,k); g=lerp(160,240,k); b=lerp(30,200*k,k); a=0.88+0.08*k; }
+          else if (heat < 0.45){ const k=(heat-0.25)/0.2; r=80+(80*k); g=20+(20*k); b=0; a=0.55+0.3*k; }
+          else if (heat < 0.7){ const k=(heat-0.45)/0.25; r=160+(70*k); g=60+(50*k); b=10+(10*k); a=0.7+0.2*k; }
+          else { const k=(heat-0.7)/0.3; r=230+(25*k); g=160+(80*k); b=30+(170*k); a=0.88+0.08*k; }
           const idx = (j*ow + i)*4;
-          data[idx]   = r;
-          data[idx+1] = g;
-          data[idx+2] = b;
-          data[idx+3] = Math.floor(255 * a);
+          data[idx]=r; data[idx+1]=g; data[idx+2]=b; data[idx+3]=Math.floor(255*a);
         }
       }
       oc.putImageData(img, 0, 0);
@@ -667,7 +576,6 @@
     function draw(){
       const w = fireCanvas.width, h = fireCanvas.height;
       fctx.clearRect(0,0,w,h);
-      // glow
       const baseY = h*0.88;
       const rg = fctx.createRadialGradient(w*0.5, baseY, 10, w*0.5, baseY, h*0.35);
       rg.addColorStop(0,'rgba(255,170,60,.28)');
@@ -675,20 +583,17 @@
       fctx.fillStyle = rg;
       fctx.beginPath(); fctx.arc(w*0.5, baseY, h*0.35, 0, TWO_PI); fctx.fill();
 
-      // draw flame texture scaled up (additive)
       fctx.globalCompositeOperation = 'lighter';
-      const fw = w*0.42, fh = h*0.42; // flame size
+      const fw = w*0.42, fh = h*0.42;
       fctx.imageSmoothingEnabled = true;
       fctx.drawImage(off, w*0.5 - fw/2, baseY - fh, fw, fh);
       fctx.globalCompositeOperation = 'source-over';
 
-      // logs
       fctx.fillStyle = '#1a1715';
       fctx.fillRect(w*0.33, baseY+6*DPR, w*0.34, 6*DPR);
       fctx.fillStyle = '#2b231f';
       fctx.fillRect(w*0.28, baseY+10*DPR, w*0.44, 6*DPR);
 
-      // embers
       fctx.globalCompositeOperation = 'lighter';
       for (let i=fireEmbers.length-1;i>=0;i--){
         const e = fireEmbers[i];
@@ -705,6 +610,9 @@
 
     return { resize, step, draw };
   })();
+
+  // ensure offscreen field has initial size
+  fireField.resize();
 
   function spawnEmbers(){
     const w = fireCanvas.width, h = fireCanvas.height;
@@ -725,19 +633,13 @@
     const w = sceneCanvas.width, h = sceneCanvas.height;
 
     if (!state.visualsPaused){
-      // clear transparent scene layer
       ctx.clearRect(0,0,w,h);
 
-      // Winter snow (improved)
       if (state.season === 'winter') updateDrawSnow(dt, now, w, h);
 
-      // Seasonal (leaves/petals/fireflies)
       updateDrawSeason(dt, now, w, h);
-
-      // Rain visuals (any season)
       updateDrawRain(dt, now, w, h);
 
-      // Fireplace
       if (state.fireplace && settings[state.season].supportsFireplace){
         fireField.step(dt);
         fireField.draw();
@@ -754,7 +656,7 @@
   }
 
   // --------------------------
-  // WebAudio engine (same as before, procedural)
+  // WebAudio engine
   // --------------------------
   const AudioEngine = (() => {
     let ctx, master;
@@ -876,7 +778,6 @@
     history.replaceState(null, '', '#'+qs.toString());
   }
 
-  // Season selection
   const seasonChips = $('#seasonChips');
   function setSeasonChip(name){ $$('#seasonChips .chip').forEach(c => c.setAttribute('aria-pressed', String(c.dataset.season===name))); }
   function updateFireplaceUI(){
@@ -900,9 +801,8 @@
   $('#seasonNote').textContent = settings[state.season].label + ' selected.';
   applySeasonTint(); updateFireplaceUI();
 
-  // Visual toggles/sliders
   const bindCheck = (sel, key, sub) => { const el=$(sel); el.checked = !!state[key]; el.addEventListener('change', ()=>{ state[key]=el.checked; if(sub) sub(); saveState(); }); };
-  const bindRange = (sel, obj, key, on) => { const el=$(sel); el.value = state[obj][key] ?? state[key]; el.addEventListener('input', ()=>{ if (obj) state[obj][key]=Number(el.value); else state[key]=Number(el.value); if(on) on(); saveState(); }); };
+  const bindRange = (sel, obj, key, on) => { const el=$(sel); el.value = state[obj]?.[key] ?? state[key]; el.addEventListener('input', ()=>{ if (obj) state[obj][key]=Number(el.value); else state[key]=Number(el.value); if(on) on(); saveState(); }); };
 
   bindCheck('#toggleFireplace','fireplace', null);
   bindCheck('#visRain','visualRain', null);
@@ -933,7 +833,7 @@
     const el = $(id); el.checked = !!state.sounds[name];
     el.addEventListener('change', async () => {
       state.sounds[name] = el.checked;
-      if (el.checked){ await AudioEngine.resume(); AudioEngine.start(name); AudioEngine.setVolume(name, state.volumes[name]); }
+      if (el.checked){ try { await AudioEngine.resume(); } catch(_){} AudioEngine.start(name); AudioEngine.setVolume(name, state.volumes[name]); }
       else { AudioEngine.stop(name); }
       saveState();
     });
@@ -945,11 +845,13 @@
   bindSoundToggle('#sndRain','rain'); bindSoundToggle('#sndFire','fire'); bindSoundToggle('#sndWind','wind');
   bindVol('#volRain','rain'); bindVol('#volFire','fire'); bindVol('#volWind','wind'); bindVol('#volMaster','master');
 
-  // Start audio buttons (gate + panel)
+  // 🔧 Safer: close the gate even if audio resume fails
   async function unlockAudio(){
-    await AudioEngine.resume();
+    try { await AudioEngine.resume(); } catch(e){ console.warn('Audio resume issue:', e); }
     for (const k of ['rain','fire','wind']){
-      if (state.sounds[k]) { AudioEngine.start(k); AudioEngine.setVolume(k, state.volumes[k]); }
+      if (state.sounds[k]) {
+        try { AudioEngine.start(k); AudioEngine.setVolume(k, state.volumes[k]); } catch(_) {}
+      }
     }
     $('#gate').style.display = 'none';
   }
