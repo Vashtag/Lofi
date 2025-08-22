@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ambience – Seasons & Sounds</title>
+<meta name="color-scheme" content="dark light">
+<style>
+  :root{
+    --panel-bg: rgba(18,18,18,.72);
+    --panel-border: rgba(255,255,255,.12);
+    --text: #e9e9ee;
+    --accent: #7bd;
+    --accent-2: #f6b26b;
+    --muted: #b9c1cb;
+    --ok: #61d095;
+    --warn: #ffcc66;
+    --danger: #ff6b6b;
+    --shadow: 0 10px 30px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    margin: 0;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    background: #0b0f14;
+    color: var(--text);
+  }
+
+  /* Scene layers */
+  #scene-wrap{
+    position: fixed; inset: 0;
+    overflow: hidden;
+    filter: var(--scene-filter, none);
+  }
+  canvas#scene, canvas#fireplace {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+  }
+
+  /* Control panel */
+  .panel{
+    position: fixed; left: 1rem; bottom: 1rem; width: min(420px, calc(100vw - 2rem));
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(8px) saturate(120%);
+    padding: .9rem;
+  }
+  .row{ display: grid; gap: .6rem; margin: .4rem 0 .8rem; }
+  .row.cols-2{ grid-template-columns: 1fr 1fr; }
+  .row.cols-3{ grid-template-columns: repeat(3, 1fr); }
+  .row.align { align-items: center; }
+  .label{
+    font-weight: 600; letter-spacing: .2px; font-size: .95rem; color: var(--muted);
+    display:flex; align-items:center; gap:.45rem;
+  }
+  .chips{ display: flex; gap: .4rem; flex-wrap: wrap; }
+  .chip{
+    appearance: none;
+    border: 1px solid var(--panel-border);
+    background: rgba(255,255,255,.04);
+    color: var(--text);
+    padding: .45rem .7rem;
+    border-radius: 999px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: transform .05s ease, background .2s;
+  }
+  .chip[aria-pressed="true"]{
+    background: linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,.03));
+    border-color: rgba(255,255,255,.22);
+    outline: 2px solid color-mix(in hsl, var(--accent) 75%, transparent);
+  }
+  button, .toggle{
+    cursor: pointer;
+  }
+  button.primary{
+    background: linear-gradient(180deg, color-mix(in hsl, var(--accent) 70%, transparent), rgba(255,255,255,.05));
+    color: #06131d;
+    font-weight: 800;
+    border: 1px solid rgba(255,255,255,.18);
+    border-radius: 10px;
+    padding: .6rem .9rem;
+  }
+  .small{ font-size: .85rem; color: var(--muted); }
+  .slider{
+    display: grid; grid-template-columns: 1fr auto; gap: .6rem; align-items: center;
+  }
+  input[type="range"]{
+    width: 100%;
+  }
+  .switch{
+    display: inline-flex; align-items: center; gap: .5rem;
+  }
+  .switch input{ width: 42px; height: 22px; }
+  .section{
+    border-top: 1px dashed var(--panel-border);
+    margin-top: .6rem; padding-top: .6rem;
+  }
+  .muted{ color: var(--muted); }
+  .disabled{
+    opacity: .5; pointer-events: none;
+  }
+
+  /* Start gate for audio */
+  #gate{
+    position: fixed; inset: 0; display: grid; place-items: center;
+    background: radial-gradient(1200px circle at 50% 30%, #101820 0%, #080c10 60%, #05070a 100%);
+    z-index: 5;
+  }
+  #gate .card{
+    background: rgba(15,18,22,.7);
+    border: 1px solid var(--panel-border);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 1.2rem 1.2rem 1rem;
+    text-align: center;
+    max-width: min(520px, 92vw);
+    backdrop-filter: blur(8px) saturate(120%);
+  }
+  #gate h1{ margin: .2rem 0 .6rem; font-size: 1.4rem; }
+  #gate p{ margin: .2rem 0 .9rem; color: var(--muted); }
+  #gate button{ font-size: 1.05rem; padding: .7rem 1rem; }
+
+  /* Top-right mini bar */
+  #mini{
+    position: fixed; right: 1rem; top: 1rem;
+    display:flex; gap:.5rem; z-index:3;
+  }
+  #mini button{
+    border-radius: 999px; padding: .4rem .7rem; border: 1px solid var(--panel-border);
+    background: rgba(255,255,255,.05);
+    color: var(--text);
+  }
+
+  /* Accessibility: prefers-reduced-motion reduces particle count */
+  @media (prefers-reduced-motion: reduce){
+    :root{ --reduced: 0.55; }
+  }
+  @media (max-width: 480px){
+    .panel{ left:.75rem; right:.75rem; width:auto; }
+  }
+</style>
+</head>
+<body>
+  <div id="scene-wrap" aria-hidden="true">
+    <canvas id="scene"></canvas>
+    <canvas id="fireplace" aria-hidden="true"></canvas>
+  </div>
+
+  <div id="mini" role="toolbar" aria-label="Quick actions">
+    <button id="btnFull" title="Toggle fullscreen (f)">⛶ Fullscreen</button>
+    <button id="btnPause" title="Pause visuals (p)">⏸︎ Pause visuals</button>
+  </div>
+
+  <div class="panel" role="region" aria-label="Ambience controls">
+    <div class="row">
+      <div class="label">Season</div>
+      <div class="chips" id="seasonChips" role="group" aria-label="Choose season">
+        <button class="chip" data-season="winter" aria-pressed="false">Winter ❄️</button>
+        <button class="chip" data-season="fall" aria-pressed="false">Fall 🍂</button>
+        <button class="chip" data-season="spring" aria-pressed="false">Spring 🌸</button>
+        <button class="chip" data-season="summer" aria-pressed="false">Summer 🌙</button>
+      </div>
+      <div class="small" id="seasonNote"></div>
+    </div>
+
+    <div class="row section">
+      <div class="label">Sounds</div>
+      <div class="row cols-3 align">
+        <label class="switch"><input type="checkbox" id="sndRain"> Rain</label>
+        <label class="switch"><input type="checkbox" id="sndFire"> Fire crackle</label>
+        <label class="switch"><input type="checkbox" id="sndWind"> Wind</label>
+      </div>
+      <div class="row">
+        <div class="slider"><label for="volRain">Rain volume</label><input type="range" id="volRain" min="0" max="100" value="65"></div>
+        <div class="slider"><label for="volFire">Fire volume</label><input type="range" id="volFire" min="0" max="100" value="55"></div>
+        <div class="slider"><label for="volWind">Wind volume</label><input type="range" id="volWind" min="0" max="100" value="35"></div>
+        <div class="slider"><label for="volMaster"><strong>Master volume</strong></label><input type="range" id="volMaster" min="0" max="100" value="70"></div>
+      </div>
+      <div class="small">Note: Browsers require a click to start audio. Use the button below once.</div>
+    </div>
+
+    <div class="row section">
+      <div class="label">Visuals</div>
+      <div class="slider"><label for="intensity">Scene intensity</label><input type="range" id="intensity" min="10" max="150" value="85"></div>
+      <div class="slider"><label for="warmth">Warmth (sepia)</label><input type="range" id="warmth" min="0" max="100" value="18"></div>
+      <div class="slider"><label for="brightness">Brightness</label><input type="range" id="brightness" min="40" max="130" value="100"></div>
+      <div class="slider"><label for="blur">Background blur</label><input type="range" id="blur" min="0" max="8" value="0"></div>
+      <div class="row align">
+        <label class="switch"><input type="checkbox" id="toggleFireplace"> Fireplace visual</label>
+        <span class="small muted" id="fireplaceHint">Available in Winter & Fall.</span>
+      </div>
+    </div>
+
+    <div class="row section">
+      <div class="label">Session</div>
+      <div class="row cols-2">
+        <button id="btnStartAudio" class="primary">▶ Start ambience (enable audio)</button>
+        <button id="btnShare">🔗 Share this setup</button>
+      </div>
+      <div class="small">Settings auto-save to your browser and URL.</div>
+    </div>
+  </div>
+
+  <!-- Start gate (first click to unlock audio) -->
+  <div id="gate" aria-modal="true" role="dialog">
+    <div class="card">
+      <h1>Ambient Seasons</h1>
+      <p>Create your atmosphere: choose a season, mix rain, fire crackle, wind, and cozy visuals.<br>Click once to enable sound.</p>
+      <button id="gateStart" class="primary">Let’s begin</button>
+      <div class="small" style="margin-top:.6rem;">Tip: press <kbd>F</kbd> for fullscreen, <kbd>P</kbd> to pause visuals.</div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // --------------------------
+  // Utilities
+  // --------------------------
+  const $ = s => document.querySelector(s);
+  const $$ = s => Array.from(document.querySelectorAll(s));
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const lerp = (a,b,t)=>a+(b-a)*t;
+
+  const state = {
+    season: 'winter',
+    intensity: 85,
+    warmth: 18,
+    brightness: 100,
+    blur: 0,
+    fireplace: true,
+    sounds: { rain:false, fire:false, wind:false },
+    volumes: { rain:65, fire:55, wind:35, master:70 },
+    visualsPaused: false
+  };
+
+  // Load from URL or localStorage
+  const url = new URL(location.href);
+  const fromHash = url.hash ? Object.fromEntries(new URLSearchParams(url.hash.slice(1))) : {};
+  const saved = JSON.parse(localStorage.getItem('ambience:v1')||'{}');
+  Object.assign(state, saved, fromHash);
+
+  // --------------------------
+  // Canvas setup
+  // --------------------------
+  const sceneCanvas = $('#scene');
+  const fireCanvas  = $('#fireplace');
+  const ctx = sceneCanvas.getContext('2d', { alpha: false });
+  const fctx = fireCanvas.getContext('2d');
+
+  let DPR = Math.max(1, Math.min(2, (window.devicePixelRatio || 1)));
+  const fit = () => {
+    const w = innerWidth, h = innerHeight;
+    for (const c of [sceneCanvas, fireCanvas]) {
+      c.width = Math.floor(w * DPR);
+      c.height = Math.floor(h * DPR);
+      c.style.width = w+'px'; c.style.height = h+'px';
+    }
+  };
+  fit();
+  addEventListener('resize', fit);
+
+  // --------------------------
+  // Scene particles
+  // --------------------------
+  const settings = {
+    winter: {
+      label: "Winter ❄️",
+      bg: (t,w,h)=>gradientSky(ctx,w,h,[['#0b1623',0],['#0f2030',0.6],['#0a1420',1]]),
+      supportsFireplace: true,
+      make: ()=> makeSnow(),
+      tick: (p,dt)=> tickSnow(p,dt),
+      draw: (p)=> drawSnow(p),
+      baseRate: 0.6
+    },
+    fall: {
+      label: "Fall 🍂",
+      bg: (t,w,h)=>gradientSky(ctx,w,h,[['#1a100a',0],['#2a170d',0.5],['#100805',1]]),
+      supportsFireplace: true,
+      make: ()=> makeLeaf(),
+      tick: (p,dt)=> tickLeaf(p,dt),
+      draw: (p)=> drawLeaf(p),
+      baseRate: 0.45
+    },
+    spring: {
+      label: "Spring 🌸",
+      bg: (t,w,h)=>gradientSky(ctx,w,h,[['#142116',0],['#1d2e1f',0.55],['#0b160d',1]]),
+      supportsFireplace: false,
+      make: ()=> makePetal(),
+      tick: (p,dt)=> tickPetal(p,dt),
+      draw: (p)=> drawPetal(p),
+      baseRate: 0.5
+    },
+    summer: {
+      label: "Summer 🌙",
+      bg: (t,w,h)=>gradientSky(ctx,w,h,[['#0a0f1a',0],['#08101a',0.55],['#050a12',1]]),
+      supportsFireplace: false,
+      make: ()=> makeFirefly(),
+      tick: (p,dt)=> tickFirefly(p,dt),
+      draw: (p)=> drawFirefly(p),
+      baseRate: 0.18
+    }
+  };
+
+  let particles = [];
+  let fireParticles = [];
+  let lastTime = performance.now();
+
+  function gradientSky(ctx,w,h,stops){
+    const g = ctx.createLinearGradient(0,0,0,h);
+    for (const [c, p] of stops) g.addColorStop(p, c);
+    ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+  }
+
+  function rnd(a=1,b){ if(b===undefined) return Math.random()*a; return a+Math.random()*(b-a); }
+  const TWO_PI = Math.PI*2;
+
+  // --- Snow
+  function makeSnow(){
+    return {
+      kind:'snow',
+      x: rnd(0, sceneCanvas.width),
+      y: rnd(-50, -10),
+      r: rnd(1.2, 3.2)*DPR,
+      vy: rnd(20, 55),
+      vx: rnd(-15, 15),
+      wob: rnd(0.8, 2.0),
+      ang: rnd(0, TWO_PI),
+      alpha: rnd(0.6, 0.95)
+    };
+  }
+  function tickSnow(p,dt){
+    p.ang += dt*0.002*p.wob;
+    p.x += (Math.sin(p.ang)*12 + p.vx*0.1) * dt/16;
+    p.y += p.vy * dt/16;
+    if(p.y > sceneCanvas.height + 8) p.y = rnd(-80,-20), p.x = rnd(0, sceneCanvas.width);
+  }
+  function drawSnow(p){
+    ctx.globalAlpha = p.alpha;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, TWO_PI);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // --- Leaves
+  const leafPalette = ['#d1782c','#c45508','#8b3e07','#aa6b24','#b05a2a'];
+  function makeLeaf(){
+    return {
+      kind:'leaf',
+      x: rnd(0, sceneCanvas.width),
+      y: rnd(-60, -10),
+      s: rnd(6, 16)*DPR,
+      vy: rnd(30, 65),
+      vx: rnd(-25, 25),
+      rot: rnd(0, TWO_PI),
+      rotSpd: rnd(-0.02,0.02),
+      col: leafPalette[(Math.random()*leafPalette.length)|0],
+      alpha: rnd(0.7, 0.98)
+    };
+  }
+  function tickLeaf(p,dt){
+    p.rot += p.rotSpd * dt;
+    p.x += (Math.sin(p.rot*1.4)*20 + p.vx*0.08) * dt/16;
+    p.y += p.vy * dt/16;
+    if(p.y > sceneCanvas.height + 12) p.y = rnd(-100,-20), p.x = rnd(0, sceneCanvas.width);
+  }
+  function drawLeaf(p){
+    const s = p.s;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rot);
+    ctx.globalAlpha = p.alpha;
+    ctx.fillStyle = p.col;
+    ctx.beginPath();
+    ctx.moveTo(-s*0.4, 0);
+    ctx.quadraticCurveTo(0, -s*0.8, s*0.5, 0);
+    ctx.quadraticCurveTo(0, s*0.8, -s*0.4, 0);
+    ctx.fill();
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  // --- Petals (spring)
+  const petalPalette = ['#ffd4e0','#ffc6da','#ffe2ea','#ffd8f1','#fff0f5'];
+  function makePetal(){
+    return {
+      kind:'petal',
+      x: rnd(0, sceneCanvas.width),
+      y: rnd(-60, -10),
+      w: rnd(6, 14)*DPR,
+      h: rnd(3, 7)*DPR,
+      vy: rnd(24, 48),
+      vx: rnd(-15, 15),
+      rot: rnd(0, TWO_PI),
+      rotSpd: rnd(-0.03,0.03),
+      col: petalPalette[(Math.random()*petalPalette.length)|0],
+      alpha: rnd(0.75, 0.98)
+    };
+  }
+  function tickPetal(p,dt){
+    p.rot += p.rotSpd * dt;
+    p.x += (Math.sin(p.rot*1.1)*18 + p.vx*0.06) * dt/16;
+    p.y += p.vy * dt/16;
+    if(p.y > sceneCanvas.height + 12) p.y = rnd(-100,-20), p.x = rnd(0, sceneCanvas.width);
+  }
+  function drawPetal(p){
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rot);
+    ctx.globalAlpha = p.alpha;
+    ctx.fillStyle = p.col;
+    ctx.beginPath();
+    const r = p.w/2;
+    ctx.ellipse(0,0,p.w,p.h,0,0,TWO_PI);
+    ctx.fill();
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  // --- Fireflies (summer)
+  function makeFirefly(){
+    return {
+      kind:'firefly',
+      x: rnd(0, sceneCanvas.width),
+      y: rnd(0, sceneCanvas.height*0.85),
+      r: rnd(1.8,3.4)*DPR,
+      phase: rnd(0, TWO_PI),
+      speed: rnd(6, 16),
+      dir: rnd(0, TWO_PI),
+    };
+  }
+  function tickFirefly(p,dt){
+    p.phase += dt*0.01;
+    p.x += Math.cos(p.dir)*p.speed*dt/16;
+    p.y += Math.sin(p.dir)*p.speed*dt/16;
+    // wander
+    p.dir += rnd(-0.01,0.01)*dt/16;
+    if(p.x<0||p.x>sceneCanvas.width) p.dir = Math.PI - p.dir;
+    if(p.y<0||p.y>sceneCanvas.height) p.dir = -p.dir;
+  }
+  function drawFirefly(p){
+    const glow = (Math.sin(p.phase)*0.5+0.5)*0.9+0.1;
+    const r = p.r*(0.8+glow*0.6);
+    const g = ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*3);
+    g.addColorStop(0, `rgba(255,255,170,${0.9*glow+0.1})`);
+    g.addColorStop(1, 'rgba(255,255,170,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r*3, 0, TWO_PI);
+    ctx.fill();
+  }
+
+  // Fireplace visual
+  function makeFireParticle(){
+    const w = sceneCanvas.width, h = sceneCanvas.height;
+    const baseY = h*0.88;
+    const baseX = w*0.5 + rnd(-w*0.12, w*0.12);
+    return {
+      x: baseX,
+      y: baseY,
+      vy: rnd(-80, -160),
+      life: rnd(0.8, 1.6),
+      age: 0,
+      r: rnd(2, 6)*DPR,
+      hue: rnd(20, 45), // warm hues
+    };
+  }
+  function drawFireplace(dt){
+    const w = fireCanvas.width, h = fireCanvas.height;
+    fctx.clearRect(0,0,w,h);
+    const baseY = h*0.88;
+    // Hearth
+    fctx.fillStyle = '#1a1a1a';
+    fctx.fillRect(w*0.25, baseY+8, w*0.5, 8*DPR);
+    // Glow
+    const g = fctx.createRadialGradient(w*0.5, baseY, 10, w*0.5, baseY, h*0.3);
+    g.addColorStop(0, 'rgba(255,180,80,.25)');
+    g.addColorStop(1, 'rgba(255,180,80,0)');
+    fctx.fillStyle = g;
+    fctx.beginPath();
+    fctx.arc(w*0.5, baseY, h*0.3, 0, TWO_PI);
+    fctx.fill();
+
+    // Particles
+    const targetCount = Math.floor( (state.intensity/100) * 180 * (window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.6 : 1) );
+    while (fireParticles.length < targetCount) fireParticles.push(makeFireParticle());
+
+    for (let i=fireParticles.length-1;i>=0;i--){
+      const p = fireParticles[i];
+      p.age += dt/1000;
+      p.y += p.vy * dt/1000;
+      p.x += Math.sin(p.age*6)*20*dt/1000;
+      const lifeT = p.age / p.life;
+      if(lifeT >= 1){ fireParticles.splice(i,1); continue; }
+      const alpha = 1 - lifeT;
+      fctx.globalCompositeOperation = 'lighter';
+      fctx.fillStyle = `hsla(${p.hue}, 90%, ${lerp(60, 45, lifeT)}%, ${alpha})`;
+      fctx.beginPath();
+      fctx.arc(p.x, p.y, p.r*(1-lifeT*0.6), 0, TWO_PI);
+      fctx.fill();
+      fctx.globalCompositeOperation = 'source-over';
+    }
+  }
+
+  // --------------------------
+  // Animation loop
+  // --------------------------
+  function animate(){
+    const now = performance.now();
+    const dt = clamp(now - lastTime, 8, 48);
+    lastTime = now;
+
+    if (!state.visualsPaused){
+      // Background
+      settings[state.season].bg(now, sceneCanvas.width, sceneCanvas.height);
+      // Particle target
+      const target = Math.floor( (state.intensity/100) * (600 * (settings[state.season].baseRate)) *
+                                 (window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.6 : 1) );
+      while (particles.length < target) particles.push(settings[state.season].make());
+      while (particles.length > target) particles.pop();
+
+      // Update + draw
+      for (let i=0;i<particles.length;i++){
+        const p = particles[i];
+        settings[state.season].tick(p, dt);
+        settings[state.season].draw(p);
+      }
+
+      if (state.fireplace && settings[state.season].supportsFireplace){
+        drawFireplace(dt);
+        fireCanvas.style.display = 'block';
+      } else {
+        fireCanvas.style.display = 'none';
+        fireParticles.length = 0;
+        fctx.clearRect(0,0,fireCanvas.width, fireCanvas.height);
+      }
+    }
+
+    requestAnimationFrame(animate);
+  }
+
+  // --------------------------
+  // WebAudio engine (procedural)
+  // --------------------------
+  const AudioEngine = (() => {
+    let ctx, master;
+    const nodes = {};
+
+    function ensure(){
+      if (!ctx){
+        ctx = new (window.AudioContext || window.webkitAudioContext)();
+        master = ctx.createGain(); master.gain.value = state.volumes.master/100;
+        master.connect(ctx.destination);
+      }
+      return ctx;
+    }
+
+    function whiteNoiseBuffer(){
+      const sr = ctx.sampleRate;
+      const buf = ctx.createBuffer(1, sr*2, sr);
+      const data = buf.getChannelData(0);
+      for (let i=0;i<data.length;i++){
+        data[i] = Math.random()*2 - 1;
+      }
+      return buf;
+    }
+    function makeReverbImpulse(seconds=1.8, decay=2.8){
+      const rate = ctx.sampleRate, len = rate * seconds;
+      const impulse = ctx.createBuffer(2, len, rate);
+      for (let c=0;c<2;c++){
+        const ch = impulse.getChannelData(c);
+        for (let i=0;i<len;i++){
+          ch[i] = (Math.random()*2-1) * Math.pow(1 - i/len, decay);
+        }
+      }
+      return impulse;
+    }
+
+    function makeRain(){
+      // steady broadband noise shaped by filters + gentle delay
+      const gain = ctx.createGain(); gain.gain.value = (state.volumes.rain/100) * 0.6;
+      const src = ctx.createBufferSource(); src.buffer = whiteNoiseBuffer(); src.loop = true;
+      const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value = 3500;
+      const hp = ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value = 200;
+      const rev = ctx.createConvolver(); rev.buffer = makeReverbImpulse(1.5, 2.2);
+      const del = ctx.createDelay(1.0); del.delayTime.value = 0.22;
+      const fb = ctx.createGain(); fb.gain.value = 0.15;
+
+      // chain
+      src.connect(lp); lp.connect(hp); hp.connect(rev);
+      rev.connect(del); del.connect(fb); fb.connect(del);
+      del.connect(gain); gain.connect(master);
+
+      src.start();
+      return { kind:'rain', nodes:{gain, lp, hp, del, fb, rev, src} };
+    }
+
+    function makeWind(){
+      const gain = ctx.createGain(); gain.gain.value = (state.volumes.wind/100) * 0.4;
+      const src = ctx.createBufferSource(); src.buffer = whiteNoiseBuffer(); src.loop = true;
+      const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value = 400; bp.Q.value = 0.6;
+      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.15;
+      const lfoGain = ctx.createGain(); lfoGain.gain.value = 0.35;
+      lfo.connect(lfoGain); lfoGain.connect(bp.frequency);
+      src.connect(bp); bp.connect(gain); gain.connect(master);
+      src.start(); lfo.start();
+      return { kind:'wind', nodes:{gain, src, bp, lfo, lfoGain} };
+    }
+
+    function makeFire(){
+      // hiss + crackles (random pops)
+      const gain = ctx.createGain(); gain.gain.value = (state.volumes.fire/100) * 0.5;
+
+      // base hiss
+      const hissSrc = ctx.createBufferSource(); hissSrc.buffer = whiteNoiseBuffer(); hissSrc.loop = true;
+      const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value = 1800; bp.Q.value = 0.9;
+      hissSrc.connect(bp); bp.connect(gain);
+
+      // crackle scheduler
+      const crackBus = ctx.createGain(); crackBus.gain.value = 1.0;
+      crackBus.connect(gain);
+
+      function scheduleCrackle(){
+        if (!nodes.fire) return;
+        const when = ctx.currentTime + Math.random()*0.3; // up to 300ms
+        const dur = 0.02 + Math.random()*0.08;
+        const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate*dur), ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i=0;i<data.length;i++){
+          // sharp envelope for a "pop"
+          const t = i / data.length;
+          const env = Math.pow(1 - t, 3);
+          data[i] = (Math.random()*2-1) * env * 0.9;
+        }
+        const s = ctx.createBufferSource(); s.buffer = buf;
+        const bpf = ctx.createBiquadFilter(); bpf.type='bandpass';
+        bpf.frequency.value = 1200 + Math.random()*2000; bpf.Q.value = 4;
+        const g = ctx.createGain(); g.gain.value = 0.25 + Math.random()*0.5;
+        s.connect(bpf); bpf.connect(g); g.connect(crackBus);
+        s.start(when);
+        // reschedule with rate based on intensity
+        const rate = 20 + (state.intensity/100)*140;
+        setTimeout(scheduleCrackle, 1000/rate);
+      }
+
+      hissSrc.start();
+      scheduleCrackle();
+
+      gain.connect(master);
+      return { kind:'fire', nodes:{gain, hissSrc, bp, crackBus} };
+    }
+
+    function start(kind){
+      ensure();
+      if (nodes[kind]) return;
+      nodes[kind] = (kind==='rain') ? makeRain()
+                   : (kind==='wind') ? makeWind()
+                   : makeFire();
+    }
+
+    function stop(kind){
+      const obj = nodes[kind];
+      if (!obj) return;
+      // gracefully stop
+      try {
+        if (obj.nodes.src) obj.nodes.src.stop();
+        if (obj.nodes.hissSrc) obj.nodes.hissSrc.stop();
+        if (obj.nodes.lfo) obj.nodes.lfo.stop();
+      } catch(e){}
+      // disconnect
+      Object.values(obj.nodes).forEach(n=>{ try{ n.disconnect(); }catch(e){} });
+      delete nodes[kind];
+    }
+
+    function setVolume(kind, v){
+      if (kind==='master' && master){ master.gain.value = v/100; return; }
+      const obj = nodes[kind];
+      if (obj && obj.nodes.gain) obj.nodes.gain.gain.value = (v/100) * (kind==='rain'?0.6:kind==='fire'?0.5:0.4);
+    }
+
+    async function resume(){ ensure(); if (ctx.state !== 'running') await ctx.resume(); }
+
+    return { start, stop, setVolume, resume };
+  })();
+
+  // --------------------------
+  // UI Bindings
+  // --------------------------
+  const seasonChips = $('#seasonChips');
+  const setSeasonChip = (name) => {
+    $$('#seasonChips .chip').forEach(c => c.setAttribute('aria-pressed', String(c.dataset.season===name)));
+  };
+
+  function applyVisualFilters(){
+    const warmth = state.warmth/100;
+    const bright = state.brightness/100;
+    const blur = state.blur;
+    const filter = `brightness(${bright}) sepia(${warmth}) blur(${blur}px)`;
+    document.getElementById('scene-wrap').style.setProperty('--scene-filter', filter);
+  }
+
+  function updateFireplaceUI(){
+    const supports = settings[state.season].supportsFireplace;
+    const t = $('#toggleFireplace');
+    t.disabled = !supports;
+    $('#fireplaceHint').textContent = supports ? 'Cozy mode is on.' : 'Available in Winter & Fall.';
+    const row = t.closest('.row.align');
+    if (!supports) row.classList.add('disabled'); else row.classList.remove('disabled');
+    if (!supports) state.fireplace = false;
+    t.checked = !!state.fireplace && supports;
+  }
+
+  function saveState(){
+    localStorage.setItem('ambience:v1', JSON.stringify(state));
+    const qs = new URLSearchParams({
+      season: state.season,
+      intensity: state.intensity,
+      warmth: state.warmth,
+      brightness: state.brightness,
+      blur: state.blur,
+      fireplace: state.fireplace,
+      rain: Number(state.sounds.rain),
+      fire: Number(state.sounds.fire),
+      wind: Number(state.sounds.wind),
+      vr: state.volumes.rain,
+      vf: state.volumes.fire,
+      vw: state.volumes.wind,
+      vm: state.volumes.master
+    });
+    history.replaceState(null, '', '#'+qs.toString());
+  }
+
+  // Season selection
+  seasonChips.addEventListener('click', (e) => {
+    const btn = e.target.closest('.chip');
+    if (!btn) return;
+    state.season = btn.dataset.season;
+    setSeasonChip(state.season);
+    $('#seasonNote').textContent = settings[state.season].label + ' selected.';
+    updateFireplaceUI();
+    saveState();
+  });
+  setSeasonChip(state.season);
+  $('#seasonNote').textContent = settings[state.season].label + ' selected.';
+
+  // Sliders
+  function bindSlider(id, key, onChange){
+    const el = $(id);
+    el.value = state[key];
+    el.addEventListener('input', () => {
+      state[key] = Number(el.value);
+      if (onChange) onChange(state[key]);
+      saveState();
+    });
+  }
+  bindSlider('#intensity','intensity', v => {});
+  bindSlider('#warmth','warmth', applyVisualFilters);
+  bindSlider('#brightness','brightness', applyVisualFilters);
+  bindSlider('#blur','blur', applyVisualFilters);
+
+  // Fireplace toggle
+  $('#toggleFireplace').addEventListener('change', e => {
+    state.fireplace = e.target.checked && settings[state.season].supportsFireplace;
+    saveState();
+  });
+  updateFireplaceUI();
+
+  // Sound toggles
+  function bindSoundToggle(id, name){
+    const el = $(id);
+    el.checked = !!state.sounds[name];
+    el.addEventListener('change', async () => {
+      state.sounds[name] = el.checked;
+      if (el.checked){
+        await AudioEngine.resume();
+        AudioEngine.start(name);
+        AudioEngine.setVolume(name, state.volumes[name]);
+      } else {
+        AudioEngine.stop(name);
+      }
+      saveState();
+    });
+  }
+  bindSoundToggle('#sndRain','rain');
+  bindSoundToggle('#sndFire','fire');
+  bindSoundToggle('#sndWind','wind');
+
+  // Volume sliders
+  function bindVol(id, name){
+    const el = $(id);
+    el.value = state.volumes[name];
+    el.addEventListener('input', () => {
+      state.volumes[name] = Number(el.value);
+      AudioEngine.setVolume(name, state.volumes[name]);
+      saveState();
+    });
+  }
+  bindVol('#volRain','rain');
+  bindVol('#volFire','fire');
+  bindVol('#volWind','wind');
+  bindVol('#volMaster','master');
+
+  // Start audio buttons (gate + panel)
+  async function unlockAudio(){
+    await AudioEngine.resume();
+    // re-apply current state
+    for (const k of ['rain','fire','wind']){
+      if (state.sounds[k]) {
+        AudioEngine.start(k);
+        AudioEngine.setVolume(k, state.volumes[k]);
+      }
+    }
+    $('#gate').style.display = 'none';
+  }
+  $('#gateStart').addEventListener('click', unlockAudio);
+  $('#btnStartAudio').addEventListener('click', unlockAudio);
+
+  // Share button
+  $('#btnShare').addEventListener('click', async () => {
+    saveState();
+    const shareURL = location.href;
+    try{
+      await navigator.clipboard.writeText(shareURL);
+      alert('Link copied to clipboard!');
+    }catch(e){
+      prompt('Copy this URL:', shareURL);
+    }
+  });
+
+  // Fullscreen & Pause
+  $('#btnFull').addEventListener('click', () => {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+    else document.exitFullscreen?.();
+  });
+  $('#btnPause').addEventListener('click', () => {
+    state.visualsPaused = !state.visualsPaused;
+    $('#btnPause').textContent = state.visualsPaused ? '▶ Resume visuals' : '⏸︎ Pause visuals';
+  });
+  addEventListener('keydown', e => {
+    if (e.key.toLowerCase()==='f') $('#btnFull').click();
+    if (e.key.toLowerCase()==='p') $('#btnPause').click();
+  });
+
+  // Initial filters
+  applyVisualFilters();
+
+  // Kick off animation
+  animate();
+
+  // If user had audio on previously AND enters with a user gesture (e.g. from link), they'll still need to click once.
+  // The gate stays until Start is clicked.
+
+})();
+</script>
+</body>
+</html>
