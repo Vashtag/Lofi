@@ -284,19 +284,19 @@
 /* ===================== SCENES ===================== */
 const SCENES = {
   winter: { name:"Winter", image:"assets/winter.jpg", hasFireplace:true,
-    fireHotspot:{ x:68, y:70, w:14, h:22 }, fireSprite:null, floorY:95,
+    fireHotspot:{ x:68, y:70, w:14, h:22 }, fireSprite:null, floorY:97,
     allow:{ rain:false, snow:true, leaves:false, blossom:false }, overlays:[],
     defaults:{ rainOn:false, snowOn:true, windOn:true, splashesOn:true, fireOn:false,
       blossomOn:false, leavesOn:false, blossomIntensity:0, leavesIntensity:0,
       rainIntensity:0, snowIntensity:.55, volumes:{ master:.8, rain:.7, fire:.65, wind:.45, birds:.15 } }
   },
-  spring: { name:"Spring", image:"assets/spring.jpg", hasFireplace:false, fireHotspot:null, fireSprite:null, floorY:95,
+  spring: { name:"Spring", image:"assets/spring.jpg", hasFireplace:false, fireHotspot:null, fireSprite:null, floorY:97,
     allow:{ rain:true, snow:false, leaves:false, blossom:true }, overlays:[],
     defaults:{ rainOn:true, snowOn:false, windOn:true, splashesOn:true, fireOn:false,
       blossomOn:true, leavesOn:false, blossomIntensity:.55, leavesIntensity:0,
       rainIntensity:.38, snowIntensity:0, volumes:{ master:.8, rain:.55, fire:0, wind:.35, birds:.55 } }
   },
-  summer: { name:"Summer", image:"assets/summer.jpg", hasFireplace:false, fireHotspot:null, fireSprite:null, floorY:95,
+  summer: { name:"Summer", image:"assets/summer.jpg", hasFireplace:false, fireHotspot:null, fireSprite:null, floorY:97,
     allow:{ rain:false, snow:false, leaves:false, blossom:false },
     overlays:[ { key:"picnic", label:"🧺 Picnic", url:"assets/summer_picnic.png", default:false, alwaysOff:true } ],
     waterMask:[[0.36,0.73],[0.50,0.68],[0.65,0.62],[0.86,0.62],[1.00,0.64],[1.00,0.98],[0.74,0.95],[0.50,0.93],[0.42,0.90],[0.37,0.84]],
@@ -304,7 +304,7 @@ const SCENES = {
       blossomOn:false, leavesOn:false, blossomIntensity:0, leavesIntensity:0,
       rainIntensity:0, snowIntensity:0, volumes:{ master:.75, rain:0, fire:0, wind:.25, birds:.5 } }
   },
-  fall: { name:"Fall", image:"assets/fall.jpg", hasFireplace:false, fireHotspot:null, fireSprite:null, floorY:95,
+  fall: { name:"Fall", image:"assets/fall.jpg", hasFireplace:false, fireHotspot:null, fireSprite:null, floorY:97,
     allow:{ rain:true, snow:false, leaves:true, blossom:false },
     overlays:[ { key:"pumpkins", label:"🎃 Pumpkins", url:"assets/fall_pumpkins.png", default:false } ],
     defaults:{ rainOn:true, snowOn:false, windOn:true, splashesOn:true, fireOn:false,
