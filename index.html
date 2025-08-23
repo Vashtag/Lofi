@@ -379,24 +379,45 @@ class SplashSystem{ constructor(){ this.jets=[]; this.ripples=[]; this.enabled=t
       for(let r of this.ripples){ ctx.globalAlpha=r.alpha; ctx.lineWidth=r.width; ctx.beginPath(); ctx.arc(r.x,r.y,r.r,0,Math.PI*2); ctx.stroke(); } ctx.restore(); } }
 }
 
-/* Rain */
-class RainSystem{ constructor(){ this.drops=[]; this.intensity=0; this.floorYpx=fx.height*0.95; this.enabled=false; this.splashes=new SplashSystem(); }
-  setEnabled(on){ this.enabled=on; } setSplashes(on){ this.splashes.setEnabled(on); }
+/* Rain (now supports horizontal direction via setDirX) */
+class RainSystem{
+  constructor(){
+    this.drops=[]; this.intensity=0; this.floorYpx=fx.height*0.95; this.enabled=false; this.splashes=new SplashSystem();
+    this.dirX = 1; // +1 = left->right, -1 = right->left
+  }
+  setEnabled(on){ this.enabled=on; }
+  setSplashes(on){ this.splashes.setEnabled(on); }
   setFloorY(yPx){ this.floorYpx=yPx; this.splashes.setFloorY(yPx); }
   setIntensity(f){ this.intensity=clamp01(f); }
-  spawnOne(layer=1){ const W=fx.width,H=fx.height; const x=Math.random()*(W+100*DPR)-50*DPR; const y=-Math.random()*H*0.15;
-    const vy=[10,14,19][layer]*DPR + Math.random()*[5,6,7][layer]*DPR; const slope=0.25+Math.random()*0.25; const vx=slope*vy;
-    const w=[0.7,1.0,1.4][layer]*DPR; const alpha=[0.35,0.55,0.8][layer]; this.drops.push({x,y,vx,vy,w,alpha,layer}); }
-  ensureCount(){ const target=Math.floor(this.intensity*900); while(this.drops.length<target){ const r=Math.random(); const layer=r<0.2?2:(r<0.75?1:0); this.spawnOne(layer); } if(this.drops.length>target) this.drops.length=target; }
-  update(){ if(!this.enabled||this.intensity<=0) return; this.ensureCount(); const W=fx.width,H=fx.height;
-    for(let d of this.drops){ d.x+=d.vx+gust.val*(0.25+d.layer*0.25); d.y+=d.vy;
+  setDirX(sign){ this.dirX = (sign<0 ? -1 : 1); }
+  spawnOne(layer=1){
+    const W=fx.width,H=fx.height;
+    const x=Math.random()*(W+100*DPR)-50*DPR; const y=-Math.random()*H*0.15;
+    const vy=[10,14,19][layer]*DPR + Math.random()*[5,6,7][layer]*DPR;
+    const slope=0.25+Math.random()*0.25; const vx=this.dirX * slope*vy;
+    const w=[0.7,1.0,1.4][layer]*DPR; const alpha=[0.35,0.55,0.8][layer];
+    this.drops.push({x,y,vx,vy,w,alpha,layer});
+  }
+  ensureCount(){ const target=Math.floor(this.intensity*900);
+    while(this.drops.length<target){ const r=Math.random(); const layer=r<0.2?2:(r<0.75?1:0); this.spawnOne(layer); }
+    if(this.drops.length>target) this.drops.length=target;
+  }
+  update(){ if(!this.enabled||this.intensity<=0) return; this.ensureCount();
+    const W=fx.width,H=fx.height;
+    for(let d of this.drops){
+      d.x+=d.vx + this.dirX * gust.val*(0.25+d.layer*0.25);
+      d.y+=d.vy;
       if(d.y>=this.floorYpx){ this.splashes.spawn(d.x,0.7+d.layer*0.3); d.y=-Math.random()*H*0.2; d.x=Math.random()*(W+100*DPR)-50*DPR; }
-      if(d.x<-60*DPR) d.x=W+60*DPR; if(d.x>W+60*DPR) d.x=-60*DPR; }
-    this.splashes.update(); }
+      if(d.x<-60*DPR) d.x=W+60*DPR; if(d.x>W+60*DPR) d.x=-60*DPR;
+    }
+    this.splashes.update();
+  }
   draw(){ if(!this.enabled||this.intensity<=0) return; ctx.save(); ctx.lineCap='round';
     for(let pass=0; pass<3; pass++){ for(let d of this.drops){ if(d.layer!==pass) continue;
       ctx.globalAlpha=d.alpha; ctx.strokeStyle='#bcd7ff'; ctx.lineWidth=d.w; ctx.beginPath(); ctx.moveTo(d.x,d.y);
-      ctx.lineTo(d.x-(d.vx+gust.val*0.2)*0.5, d.y-d.vy*0.5); ctx.stroke(); } } ctx.restore(); this.splashes.draw(); }
+      ctx.lineTo(d.x-(d.vx + this.dirX*gust.val*0.2)*0.5, d.y-d.vy*0.5); ctx.stroke(); } }
+    ctx.restore(); this.splashes.draw();
+  }
 }
 
 /* Snow (wind makes it erratic) */
@@ -425,7 +446,7 @@ class LeafSystem{
     this.enabled=false; this.intensity=0;
     this.leaves=[]; this.sprites=[]; this.ready=false;
     this.spriteBias=0.7;                      // how often to use sprites vs procedural
-    this.spriteScaleRange=[0.10, 0.30];       // draw sprites at 10–30% of current size
+    this.spriteScaleRange=[0.10, 0.30];       // draw leaf sprites at 10–30% of original
     this.fallbackColors=['#c55c18','#d79a2e','#9a5a1a','#bf6f24'];
   }
   async load(urls){
@@ -485,13 +506,14 @@ class LeafSystem{
   }
 }
 
-/* ===== BLOSSOMS (spring) — sprites + procedural, rotation, scaled smaller ===== */
+/* ===== BLOSSOMS (spring) — sprites + procedural, rotation, scaled much smaller; supports setDirX ===== */
 class PetalSystem{
   constructor(){
     this.enabled=false; this.intensity=0;
     this.petals=[]; this.sprites=[]; this.ready=false;
     this.spriteBias=0.65;                     // how often to use sprites
-    this.spriteScaleRange=[0.10, 0.30];       // draw sprites at 10–30% of current size
+    this.spriteScaleRange=[0.05, 0.15];       // petals: 5–15% of original (smaller than leaves)
+    this.dirX = 1;                            // +1 = left->right, -1 = right->left (used for spring)
     this.colors=['#ffd6ea','#ffcbe3','#ffe6f2','#ffd1e6'];
   }
   async load(urls){
@@ -499,6 +521,7 @@ class PetalSystem{
     const imgs=await Promise.all(loads); this.sprites=imgs.filter(Boolean); this.ready=this.sprites.length>0;
   }
   setEnabled(on){ this.enabled=on; } setIntensity(f){ this.intensity=clamp01(f); }
+  setDirX(sign){ this.dirX = (sign<0 ? -1 : 1); }
   ensureCount(){ const target=Math.floor(this.intensity*180); while(this.petals.length<target) this.spawn(); if(this.petals.length>target) this.petals.length=target; }
   spawn(){
     const W=fx.width,H=fx.height;
@@ -523,7 +546,8 @@ class PetalSystem{
     for(let P of this.petals){
       P.t += 0.04 + (gust.on?0.02:0.0);
       const flutter = Math.sin(P.t*1.3)*0.8 + Math.cos(P.t*0.9)*0.4;
-      P.x += P.vx + gust.val*0.28 + flutter*DPR*0.22;
+      // Flip entire horizontal drift by dirX (spring -> -1)
+      P.x += this.dirX * ( P.vx + gust.val*0.28 + flutter*DPR*0.22 );
       P.y += P.vy*(0.7 + 0.2*Math.sin(P.t));
       P.rot += P.rotSpd + 0.01*Math.sin(P.t*1.7);
       if(P.y>H+30*DPR){ P.y=-20*DPR; P.x=Math.random()*W; }
@@ -603,7 +627,7 @@ const blossomChipEl=$('#blossomChip'), blossomWrapEl=$('#blossomWrap');
 const rainWrapEl=$('#rainWrap'), snowWrapEl=$('#snowWrap');
 
 let currentSeasonKey=null, currentCfg=null, hotspotDebug=false;
-let overlayState={}, overlayImgs={}; const STORE_KEY='ambience.settings.v10';
+let overlayState={}, overlayImgs={}; const STORE_KEY='ambience.settings.v11';
 
 function saveSettings(){
   try{
@@ -689,7 +713,17 @@ async function loadSeason(key){
 
   const floorPx = fx.height * (currentCfg.floorY/100);
   rainFX.setFloorY(floorPx); rainFX.setSplashes(splashesOn.checked);
-  snowFX.setEnabled(snowOn.checked);  petalFX.setEnabled(blossomOn.checked);
+
+  // >>> Spring-only direction flip for rain & petals <<<
+  const flip = (key==='spring') ? -1 : 1;
+  rainFX.setDirX(flip);
+  petalFX.setDirX(flip);
+  // Clear existing particles so new ones spawn with the new direction
+  rainFX.drops = []; if (rainFX.splashes){ rainFX.splashes.jets=[]; rainFX.splashes.ripples=[]; }
+  petalFX.petals = [];
+
+  snowFX.setEnabled(snowOn.checked);
+  petalFX.setEnabled(blossomOn.checked);
   leafFX.setEnabled(leavesOn.checked && currentSeasonKey==='fall');
 
   updateVisibilityForSeason(); enforceSeasonConstraints();
