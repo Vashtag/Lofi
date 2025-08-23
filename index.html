@@ -22,29 +22,19 @@
     --z-hotspots: 4;
     --z-ui: 5;
     --z-overlay: 6;
-
-    /* Parallax offsets (updated in JS) */
-    --parallaxX: 0px;
-    --parallaxY: 0px;
   }
 
   *{ box-sizing: border-box; }
   html, body { height:100%; margin:0; background:#0b0e12; color:var(--ui-text);
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial; }
 
-  /* Utility: any element with .parallax will shift together */
-  .parallax{
-    transform: translate3d(var(--parallaxX), var(--parallaxY), 0);
-    will-change: transform;
-    transition: transform 120ms ease-out;
-  }
-
   /* Scene container with stacked <img> layers */
   #scene { position:fixed; inset:0; z-index:var(--z-scene); }
   #bgRoot { position:absolute; inset:0; overflow:hidden; }
-  /* Underlay: blurred copy of base to hide seams during load/resize */
+  /* Underlay: blurred, slightly enlarged copy of the image to hide any seams */
   #bgUnderlay { position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
     filter: blur(26px) brightness(0.98); transform: scale(1.08); transform-origin:center; }
+  /* Main stack: base + overlays (e.g., picnic) */
   #bgStack { position:absolute; inset:0; }
   .bg-img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
     user-select:none; pointer-events:none; image-rendering:auto; }
@@ -54,23 +44,22 @@
   /* FX canvas (rain/snow/leaves + god rays + caustics) */
   #fx { position:fixed; inset:0; z-index:var(--z-canvas); pointer-events:none; }
 
-  /* Heat-haze (SVG displacement overlay; summer only) */
+  /* Heat‑haze (SVG displacement overlay; summer only) */
   #heatHazeSvg{ position:fixed; inset:0; z-index:var(--z-canvas); pointer-events:none; display:none; }
   #heatHazeImg{ width:100%; height:100%; }
 
   /* Overlays (lamp glows & window canvases) */
   #overlays { position:fixed; inset:0; z-index:var(--z-overlays); pointer-events:none; }
   .lamp-glow { position:fixed; width:300px; height:300px; left:50%; top:50%;
-    transform:translate(calc(-50% + var(--parallaxX)), calc(-50% + var(--parallaxY)));
-    border-radius:50%; mix-blend-mode:screen; pointer-events:none;
+    transform:translate(-50%,-50%); border-radius:50%; mix-blend-mode:screen; pointer-events:none;
     animation: lampFlicker 1.8s infinite steps(6, end); }
   @keyframes lampFlicker { 0%{filter:brightness(.95);} 50%{filter:brightness(1.05);} 100%{filter:brightness(.95);} }
   .window-overlay { position:fixed; pointer-events:none; }
 
-  /* Fire sprite (transform uses parallax vars so it stays aligned) */
+  /* Fire sprite */
   #fire-sprite { position:fixed; z-index:var(--z-sprite); width:0; height:0; display:none;
     background-repeat:no-repeat; image-rendering:auto; pointer-events:none; will-change:background-position;
-    transform: translate(calc(-50% + var(--parallaxX)), calc(-50% + var(--parallaxY))) scale(1); }
+    transform: translate(-50%,-50%) scale(1); }
 
   /* Hotspots */
   #hotspots { position:fixed; inset:0; z-index:var(--z-hotspots); pointer-events:none; }
@@ -137,16 +126,13 @@
   body.ui-hidden #controls  { opacity:0; transform: translateY( 8px); pointer-events:none; }
 
   @media (max-width: 720px){ #controls{ right:10px; left:10px; width:auto; } }
-  @media (prefers-reduced-motion: reduce){
-    .season-card img{ transition:none; }
-    .parallax     { transition:none; }
-  }
+  @media (prefers-reduced-motion: reduce){ .season-card img{ transition:none; } }
 </style>
 </head>
 <body>
 
   <!-- Scene behind everything -->
-  <div id="scene" class="parallax" role="img" aria-label="Ambience background">
+  <div id="scene" role="img" aria-label="Ambience background">
     <div id="bgRoot">
       <img id="bgUnderlay" alt="">
       <div id="bgStack">
@@ -157,10 +143,10 @@
   </div>
 
   <!-- Global FX canvas (rain/snow/leaves + god rays + caustics) -->
-  <canvas id="fx" class="parallax"></canvas>
+  <canvas id="fx"></canvas>
 
   <!-- Heat-haze SVG (summer only) -->
-  <svg id="heatHazeSvg" class="parallax" viewBox="0 0 100 100" preserveAspectRatio="none">
+  <svg id="heatHazeSvg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
     <defs>
       <!-- Displacement noise -->
       <filter id="heatHazeFilter">
@@ -172,25 +158,25 @@
           <animate attributeName="scale" dur="7s" values="4;7;5;6;4" repeatCount="indefinite"/>
         </feDisplacementMap>
       </filter>
-      <!-- Clip to a low horizontal band (approx heat shimmer near ground/water) -->
+      <!-- Clip to a low band (approx heat shimmer near ground/water) -->
       <clipPath id="hazeClip">
         <rect x="0" y="58" width="100" height="42" />
       </clipPath>
     </defs>
-    <!-- We draw the same scene image again, displaced & faint -->
+    <!-- Displaced copy of the scene image -->
     <image id="heatHazeImg" href="" x="0" y="0" width="100" height="100"
            preserveAspectRatio="xMidYMid slice" filter="url(#heatHazeFilter)"
            clip-path="url(#hazeClip)" opacity="0.12" style="mix-blend-mode:screen;"></image>
   </svg>
 
   <!-- Overlays (lamp glows, window canvases, etc.) -->
-  <div id="overlays" class="parallax"></div>
+  <div id="overlays"></div>
 
   <!-- Fire sprite -->
-  <div id="fire-sprite"></div>
+  <div id="fire-sprite" aria-hidden="true"></div>
 
   <!-- Hotspots -->
-  <div id="hotspots" class="parallax"></div>
+  <div id="hotspots"></div>
 
   <!-- Top bar -->
   <div id="topbar" class="panel">
@@ -258,16 +244,16 @@
         <div class="small">You can change this anytime.</div>
       </div>
       <div class="picker-grid">
-        <button class="season-card" data-season="winter" title="Winter">
+        <button type="button" class="season-card" data-season="winter" title="Winter">
           <img src="assets/winter.jpg" alt="Winter preview"><div class="season-label">❄️ Winter</div>
         </button>
-        <button class="season-card" data-season="spring" title="Spring">
+        <button type="button" class="season-card" data-season="spring" title="Spring">
           <img src="assets/spring.jpg" alt="Spring preview"><div class="season-label">🌱 Spring</div>
         </button>
-        <button class="season-card" data-season="summer" title="Summer">
+        <button type="button" class="season-card" data-season="summer" title="Summer">
           <img src="assets/summer.jpg" alt="Summer preview"><div class="season-label">🌞 Summer</div>
         </button>
-        <button class="season-card" data-season="fall" title="Fall">
+        <button type="button" class="season-card" data-season="fall" title="Fall">
           <img src="assets/fall.jpg" alt="Fall preview"><div class="season-label">🍂 Fall</div>
         </button>
       </div>
@@ -318,15 +304,19 @@ const SCENES = {
   summer: {
     name: "Summer",
     image: "assets/summer.jpg",
-    hasFireplace:true,
-    fireHotspot:{ x:55, y:62, w:12, h:18 },
-    fireSprite:{ url:"sprites/fire_256x256_6x4.png", frameW:256, frameH:256, cols:6, rows:4, fps:20, scale:1.0, offsetX:0, offsetY:0 },
+    hasFireplace:false,      /* no fireplace in this scene */
+    fireHotspot:null, fireSprite:null,
     floorY: 91,
     allow: { rain: false, snow: false, leaves: false },
     props: [],
     overlays: [
-      /* ALWAYS OFF ON LOAD: enforce in buildOverlayControls */
+      /* ALWAYS OFF ON LOAD */
       { key:"picnic", label:"Picnic", url:"assets/summer_picnic.png", default:false, alwaysOff:true }
+    ],
+    /* Image-space polygon approximating water in assets/summer.jpg (0..1 coords) */
+    waterMask: [
+      [0.36,0.73], [0.50,0.68], [0.65,0.62], [0.86,0.62], [1.00,0.64], [1.00,0.98],
+      [0.74,0.95], [0.50,0.93], [0.42,0.90], [0.37,0.84]
     ],
     defaults: {
       rainOn:false, snowOn:false, windOn:true, splashesOn:true, fireOn:false,
@@ -355,7 +345,7 @@ const SCENES = {
 };
 
 /* ===================== AUDIO ===================== */
-/* You provide the audio files in /audio */
+/* Provide your own files in /audio (optional) */
 const AUDIO = {
   rain:  new Audio("audio/rain.mp3"),
   fire:  new Audio("audio/fire_crackle.mp3"),
@@ -426,16 +416,26 @@ const GodRays = (()=> {
   return { draw };
 })();
 
-/* --------- CAUSTICS (summer, additive bottom-band) --------- */
+/* --------- CAUSTICS (masked to water polygon; summer only) --------- */
 const Caustics = (()=>{
   const off = document.createElement('canvas'); const g = off.getContext('2d');
   let t=0;
   function ensure(size=180){ if(off.width===size) return; off.width=off.height=size; }
-  function draw(enabled, alpha=0.14){
-    if(!enabled) return;
+  /* Map normalized image coords -> canvas device pixels, accounting for object-fit: cover */
+  function mapToCanvas(ix, iy, meta){
+    const cssW = fx.width / DPR, cssH = fx.height / DPR;        // CSS px
+    const s = Math.max(cssW/meta.w, cssH/meta.h);
+    const dispW = meta.w * s, dispH = meta.h * s;
+    const offX = (dispW - cssW)/2, offY = (dispH - cssH)/2;
+    const xCSS = ix * dispW - offX, yCSS = iy * dispH - offY;
+    return { x: xCSS*DPR, y: yCSS*DPR };                         // device px
+  }
+  function draw(enabled, alpha, normPoly, meta){
+    if(!enabled || !normPoly || !meta || !meta.w) return;
     const W=fx.width, H=fx.height; if(!W||!H) return;
+
     ensure(160); t+=0.03;
-    // generate small tile with interference pattern
+    // Generate small tile
     const imgData = g.createImageData(off.width, off.height);
     const d = imgData.data, w=off.width, h=off.height;
     for(let y=0;y<h;y++){
@@ -450,19 +450,31 @@ const Caustics = (()=>{
     }
     g.putImageData(imgData,0,0);
     const pattern = ctx.createPattern(off,'repeat');
+
+    // Build mask path from normalized polygon
+    const path = new Path2D();
+    let minY = Infinity, maxY = -Infinity;
+    normPoly.forEach((p,i)=>{
+      const m = mapToCanvas(p[0], p[1], meta);
+      if (i===0) path.moveTo(m.x, m.y); else path.lineTo(m.x, m.y);
+      minY = Math.min(minY, m.y); maxY = Math.max(maxY, m.y);
+    });
+    path.closePath();
+
     ctx.save();
+    ctx.clip(path);
     ctx.globalCompositeOperation='screen';
     ctx.globalAlpha = alpha;
     ctx.fillStyle = pattern;
-    // bottom 35% with soft vertical fade
-    const grad = ctx.createLinearGradient(0, H*0.65, 0, H);
+    ctx.fillRect(0, 0, W, H);
+
+    // Soft vertical fade within the masked area
+    const grad = ctx.createLinearGradient(0, minY, 0, maxY);
     grad.addColorStop(0,'rgba(255,255,255,0)');
+    grad.addColorStop(0.25,'rgba(255,255,255,0.65)');
     grad.addColorStop(1,'rgba(255,255,255,1)');
-    ctx.fillStyle = pattern;
-    ctx.beginPath(); ctx.rect(0, H*0.65, W, H*0.35); ctx.fill();
-    // apply fade mask by overlaying gradient in destination-in mode
     ctx.globalCompositeOperation='destination-in';
-    ctx.fillStyle=grad; ctx.fillRect(0, H*0.65, W, H*0.35);
+    ctx.fillStyle=grad; ctx.fillRect(0, minY, W, maxY-minY);
     ctx.restore();
   }
   return { draw };
@@ -573,13 +585,15 @@ leafFX.load(["sprites/leaves/leaf1.png","sprites/leaves/leaf2.png","sprites/leav
 /* --------- RENDER LOOP --------- */
 const rainFX = new RainSystem(); const snowFX = new SnowSystem();
 let running=true;
-let enableHaze=false, enableCaustics=false, raysIntensity=0.8;
+let enableCaustics=false, raysIntensity=0.8;
+let currentWaterMask=null;         // normalized polygon (0..1 coords)
+const baseMeta={ w:0, h:0 };      // natural image dimensions
 function loop(){ if(!running) return;
   ctx.clearRect(0,0,fx.width,fx.height);
 
   // Background/ambient passes first
   if (raysIntensity>0) GodRays.draw(raysIntensity);
-  Caustics.draw(enableCaustics, 0.14);
+  Caustics.draw(enableCaustics, 0.14, currentWaterMask, baseMeta);
 
   updateGust(document.getElementById('windOn').checked);
   rainFX.update(); snowFX.update(); leafFX.update();
@@ -595,7 +609,7 @@ class FireSprite{ constructor(el){ this.el=el; this.cfg=null; this.frame=0; this
   load(cfg){ this.cfg=cfg; this.frame=0; this.total=cfg.cols*cfg.rows; this.el.style.backgroundImage=`url('${cfg.url}')`;
     this.el.style.width=cfg.frameW+'px'; this.el.style.height=cfg.frameH+'px'; this.el.style.backgroundSize=`${cfg.cols*100}% ${cfg.rows*100}%`; }
   place(px,py,scale=1){ this.el.style.left=px+'px'; this.el.style.top=py+'px';
-    this.el.style.transform=`translate(calc(-50% + var(--parallaxX)), calc(-50% + var(--parallaxY))) scale(${scale})`; }
+    this.el.style.transform=`translate(-50%,-50%) scale(${scale})`; }
   start(){ if(!this.cfg) return; this.el.style.display='block';
     const step=()=>{ this.frame=(this.frame+1)%this.total; const c=this.frame%this.cfg.cols, r=Math.floor(this.frame/this.cfg.cols);
       const posX=(c/(this.cfg.cols-1))*100, posY=(r/(this.cfg.rows-1))*100; this.el.style.backgroundPosition=`${posX}% ${posY}%`;
@@ -615,7 +629,7 @@ function makeLampGlow(box, color="rgba(255,210,140,0.9)", radius=320){
   return { el: d, resize(){ const px=pctBoxToPx(box); const cx=px.left+px.width/2, cy=px.top+px.height/2; d.style.left=cx+'px'; d.style.top=cy+'px'; } };
 }
 class WindowTrail { constructor(boxPct){ this.boxPct=boxPct; this.canvas=null; this.ctx=null; this.streams=[]; this.active=false; }
-  attach(){ const px=pctBoxToPx(this.boxPct); const c=document.createElement('canvas'); c.className='window-overlay parallax';
+  attach(){ const px=pctBoxToPx(this.boxPct); const c=document.createElement('canvas'); c.className='window-overlay';
     c.style.left=px.left+'px'; c.style.top=px.top+'px'; c.width=Math.max(1, Math.floor(px.width*DPR)); c.height=Math.max(1, Math.floor(px.height*DPR));
     c.style.width=px.width+'px'; c.style.height=px.height+'px'; overlaysEl.appendChild(c); this.canvas=c; this.ctx=c.getContext('2d'); this.active=true; this.buildStreams(); }
   detach(){ if(this.canvas){ this.canvas.remove(); this.canvas=null; this.ctx=null; } this.active=false; }
@@ -738,17 +752,20 @@ function enforceSeasonConstraints() {
 async function loadSeason(key){
   currentSeasonKey = key; currentCfg = SCENES[key]; showLoader(true);
 
-  // Base image on both underlay and main
-  await new Promise(res=>{ const i=new Image(); i.onload=res; i.onerror=res; i.src=currentCfg.image; });
+  // Preload base to get natural size
+  await new Promise(res=>{
+    const i=new Image();
+    i.onload=()=>{ baseMeta.w=i.naturalWidth; baseMeta.h=i.naturalHeight; res(); };
+    i.onerror=res; i.src=currentCfg.image;
+  });
   baseImg.src = currentCfg.image; bgUnderlay.src = currentCfg.image;
-  // Heat haze image (summer only)
   heatHazeImg.setAttribute('href', currentCfg.image);
-  heatHazeSvg.style.display = (key==='summer') ? 'block' : 'none';
+  document.getElementById('heatHazeSvg').style.display = (key==='summer') ? 'block' : 'none';
 
-  // Seasonal FX toggles
-  enableHaze = (key==='summer');
+  // Summer extras
   enableCaustics = (key==='summer');
-  raysIntensity = (key==='summer') ? 0.5 : 0.85;
+  raysIntensity  = (key==='summer') ? 0.5 : 0.85;
+  currentWaterMask = (key==='summer') ? currentCfg.waterMask : null;
 
   // reset overlays (canvases)
   overlaysEl.innerHTML=''; windowTrails.splice(0, windowTrails.length);
@@ -856,8 +873,7 @@ function toggleFire(){ fireOn.checked ? extinguishFire() : lightFire(); }
 function updateMuteButton(){ muteBtn.textContent = globalMuted ? '🔊 Unmute' : '🔇 Mute'; applyVolumes(); }
 function toggleMute(){ globalMuted = !globalMuted; updateMuteButton(); saveSettings(); }
 
-/* ------- Fullscreen ------- */
-// reuse the already-declared `fullscreenBtn`
+/* ------- Fullscreen (no duplicate const) ------- */
 if (fullscreenBtn) {
   fullscreenBtn.addEventListener('click', ()=>{
     if (document.fullscreenElement) document.exitFullscreen();
@@ -884,36 +900,16 @@ function showUI(){ document.body.classList.remove('ui-hidden'); scheduleUIHide()
 });
 scheduleUIHide();
 
-/* ------- Parallax (mouse + tilt) ------- */
-(function setupParallax(){
-  let targetX=0, targetY=0, curX=0, curY=0;
-  const MAX = Math.min(12, Math.max(6, Math.floor(window.innerWidth/140))); // px
-  function apply(){ curX += (targetX - curX)*0.12; curY += (targetY - curY)*0.12;
-    document.documentElement.style.setProperty('--parallaxX', `${curX.toFixed(2)}px`);
-    document.documentElement.style.setProperty('--parallaxY', `${curY.toFixed(2)}px`);
-    requestAnimationFrame(apply);
-  }
-  apply();
-  window.addEventListener('mousemove', (e)=>{
-    const nx = (e.clientX / window.innerWidth  - 0.5) * 2;
-    const ny = (e.clientY / window.innerHeight - 0.5) * 2;
-    targetX = -nx*MAX; targetY = -ny*MAX;
-  }, {passive:true});
-  // Mobile tilt (best-effort)
-  window.addEventListener('deviceorientation', (e)=>{
-    if (e.gamma==null || e.beta==null) return;
-    const nx = Math.max(-1, Math.min(1, e.gamma/30));
-    const ny = Math.max(-1, Math.min(1, e.beta/50));
-    targetX = -nx*MAX; targetY = ny*MAX*0.8;
-  });
-})();
-
 /* ------- Wiring ------- */
-document.querySelectorAll('.season-card').forEach(btn=>{
-  btn.addEventListener('click', ()=>{ unlockAudio(); loadSeason(btn.dataset.season); });
+/* Robust event delegation for season cards */
+document.getElementById('season-picker').addEventListener('click', (e)=>{
+  const card = e.target.closest('.season-card');
+  if (!card) return;
+  unlockAudio();
+  loadSeason(card.dataset.season);
 });
-document.getElementById('changeSeasonBtn').addEventListener('click', ()=>{ seasonPicker.style.display='grid'; controls.style.display='none'; });
-document.getElementById('toggleControlsBtn').addEventListener('click', ()=>{ controls.style.display = (controls.style.display==='none' || !controls.style.display) ? 'grid' : 'none'; showUI(); });
+changeSeasonBtn.addEventListener('click', ()=>{ seasonPicker.style.display='grid'; controls.style.display='none'; });
+toggleControlsBtn.addEventListener('click', ()=>{ controls.style.display = (controls.style.display==='none' || !controls.style.display) ? 'grid' : 'none'; showUI(); });
 muteBtn.addEventListener('click', toggleMute);
 hotspotDebugBtn.addEventListener('click', ()=>{
   hotspotDebug = !hotspotDebug;
@@ -928,7 +924,7 @@ if (fireOn) fireOn.addEventListener('change', ()=> fireOn.checked ? lightFire() 
 window.addEventListener('keydown', (e)=>{
   if (e.key==='m' || e.key==='M') toggleMute();
   if (e.key==='c' || e.key==='C') { controls.style.display = (controls.style.display==='none'||!controls.style.display) ? 'grid' : 'none'; showUI(); }
-  if (e.key==='s' || e.key==='S') { document.getElementById('changeSeasonBtn').click(); }
+  if (e.key==='s' || e.key==='S') { changeSeasonBtn.click(); }
   if (e.key==='h' || e.key==='H') { hotspotDebugBtn.click(); }
 });
 
