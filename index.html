@@ -31,10 +31,10 @@
   /* Scene container with stacked <img> layers */
   #scene { position:fixed; inset:0; z-index:var(--z-scene); }
   #bgRoot { position:absolute; inset:0; overflow:hidden; }
-  /* Underlay: blurred, slightly enlarged copy of the image to hide any seams */
+  /* Underlay: blurred, slightly enlarged copy of the image to hide seams */
   #bgUnderlay { position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
     filter: blur(26px) brightness(0.98); transform: scale(1.08); transform-origin:center; }
-  /* Main stack: base + overlays (e.g., picnic) */
+  /* Main stack: base + overlays (e.g., picnic/pumpkins) */
   #bgStack { position:absolute; inset:0; }
   .bg-img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
     user-select:none; pointer-events:none; image-rendering:auto; }
@@ -48,20 +48,15 @@
   #heatHazeSvg{ position:fixed; inset:0; z-index:var(--z-canvas); pointer-events:none; display:none; }
   #heatHazeImg{ width:100%; height:100%; }
 
-  /* Overlays (lamp glows & window canvases if you add any later) */
+  /* Overlays container (future props) */
   #overlays { position:fixed; inset:0; z-index:var(--z-overlays); pointer-events:none; }
-  .lamp-glow { position:fixed; width:300px; height:300px; left:50%; top:50%;
-    transform:translate(-50%,-50%); border-radius:50%; mix-blend-mode:screen; pointer-events:none;
-    animation: lampFlicker 1.8s infinite steps(6, end); }
-  @keyframes lampFlicker { 0%{filter:brightness(.95);} 50%{filter:brightness(1.05);} 100%{filter:brightness(.95);} }
-  .window-overlay { position:fixed; pointer-events:none; }
 
   /* Fire sprite (campfire in winter only) */
   #fire-sprite { position:fixed; z-index:var(--z-sprite); width:0; height:0; display:none;
     background-repeat:no-repeat; image-rendering:auto; pointer-events:none; will-change:background-position;
     transform: translate(-50%,-50%) scale(1); }
 
-  /* Hotspots (for campfire, lamps, windows, etc.) */
+  /* Hotspots (for campfire etc.) */
   #hotspots { position:fixed; inset:0; z-index:var(--z-hotspots); pointer-events:none; }
   .hotspot { position:absolute; pointer-events:auto; cursor:pointer; background:transparent;
     border:2px dashed transparent; border-radius:8px; }
@@ -121,7 +116,7 @@
     border-top-color:var(--ui-accent); animation:spin 1s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
 
-  /* Auto-hide UI (applies to both topbar and control panel) */
+  /* Auto-hide UI */
   body.ui-hidden #topbar    { opacity:0; transform: translateY(-8px); pointer-events:none; }
   body.ui-hidden #controls  { opacity:0; transform: translateY( 8px); pointer-events:none; }
 
@@ -137,15 +132,15 @@
       <img id="bgUnderlay" alt="">
       <div id="bgStack">
         <img id="baseImg" class="bg-img" alt="">
-        <!-- overlay images (e.g., picnic) will be appended here as <img class="bg-img bg-overlay"> -->
+        <!-- overlay images (picnic/pumpkins) get appended here -->
       </div>
     </div>
   </div>
 
-  <!-- Global FX canvas (particles + god rays + caustics) -->
+  <!-- FX canvas (particles + god rays + caustics) -->
   <canvas id="fx"></canvas>
 
-  <!-- Heat-haze SVG (summer only) -->
+  <!-- Heat-haze (summer only) -->
   <svg id="heatHazeSvg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
     <defs>
       <filter id="heatHazeFilter">
@@ -157,22 +152,16 @@
           <animate attributeName="scale" dur="7s" values="4;7;5;6;4" repeatCount="indefinite"/>
         </feDisplacementMap>
       </filter>
-      <clipPath id="hazeClip">
-        <rect x="0" y="58" width="100" height="42" />
-      </clipPath>
+      <clipPath id="hazeClip"><rect x="0" y="58" width="100" height="42"/></clipPath>
     </defs>
     <image id="heatHazeImg" href="" x="0" y="0" width="100" height="100"
            preserveAspectRatio="xMidYMid slice" filter="url(#heatHazeFilter)"
            clip-path="url(#hazeClip)" opacity="0.12" style="mix-blend-mode:screen;"></image>
   </svg>
 
-  <!-- Overlays (future: lamps/windows) -->
+  <!-- Overlays and hotspots (reserved) -->
   <div id="overlays"></div>
-
-  <!-- Campfire sprite (winter only) -->
   <div id="fire-sprite" aria-hidden="true"></div>
-
-  <!-- Hotspots -->
   <div id="hotspots"></div>
 
   <!-- Top bar -->
@@ -187,7 +176,7 @@
   <!-- Controls -->
   <div id="controls" style="display:none;">
 
-    <!-- Scene elements (per-season overlays like Picnic) -->
+    <!-- Scene elements (per-season overlays like Picnic/Pumpkins) -->
     <div id="elementsPanel" class="panel" style="display:none;">
       <h2>Scene elements</h2>
       <div id="elementsList" class="row wrap"></div>
@@ -267,18 +256,17 @@
 
 <script>
 /* ===========================================================
-   SCENES (seasonal rules + overlays like Picnic)
+   SCENES (seasonal rules + overlays like Picnic/Pumpkins)
    =========================================================== */
 const SCENES = {
   winter: {
     name: "Winter",
     image: "assets/winter.jpg",
-    hasFireplace: true,                 // winter ONLY
+    hasFireplace: true,                 // winter ONLY (Campfire)
     fireHotspot: { x: 68, y: 70, w: 14, h: 22 },
-    fireSprite: null,                   // leave null if you want to add later
+    fireSprite: null,                   // add sprite sheet later if you like
     floorY: 92,
     allow: { rain: false, snow: true, leaves: false, blossom: false },
-    props: [],
     overlays: [],
     defaults: {
       rainOn:false, snowOn:true, windOn:true, splashesOn:true, fireOn:false,
@@ -295,7 +283,6 @@ const SCENES = {
     fireHotspot:null, fireSprite:null,
     floorY: 90,
     allow: { rain: true, snow: false, leaves: false, blossom: true },
-    props: [],
     overlays: [],
     defaults: {
       rainOn:true, snowOn:false, windOn:true, splashesOn:true, fireOn:false,
@@ -312,10 +299,10 @@ const SCENES = {
     fireHotspot:null, fireSprite:null,
     floorY: 91,
     allow: { rain: false, snow: false, leaves: false, blossom:false },
-    props: [],
     overlays: [
-      { key:"picnic", label:"Picnic", url:"assets/summer_picnic.png", default:false, alwaysOff:true }
+      { key:"picnic", label:"🧺 Picnic", url:"assets/summer_picnic.png", default:false, alwaysOff:true }
     ],
+    /* Water polygon (normalized to image space) for lake caustics */
     waterMask: [
       [0.36,0.73], [0.50,0.68], [0.65,0.62], [0.86,0.62], [1.00,0.64], [1.00,0.98],
       [0.74,0.95], [0.50,0.93], [0.42,0.90], [0.37,0.84]
@@ -331,12 +318,13 @@ const SCENES = {
   fall: {
     name: "Fall",
     image: "assets/fall.jpg",
-    hasFireplace:false,                 // removed
+    hasFireplace:false,                 // no fireplace in Fall
     fireHotspot:null, fireSprite:null,
     floorY: 92,
     allow: { rain: true, snow: false, leaves: true, blossom:false },
-    props: [],
-    overlays: [],
+    overlays: [
+      { key:"pumpkins", label:"🎃 Pumpkins", url:"assets/fall_pumpkins.png", default:false }
+    ],
     defaults: {
       rainOn:true, snowOn:false, windOn:true, splashesOn:true, fireOn:false,
       blossomOn:false, leavesOn:true,
@@ -558,7 +546,6 @@ class SnowSystem{
     for(let f of this.flakes){
       f.t += f.tw * (wind ? 1.35 : 1.0);
       const sway = Math.sin(f.t* (wind?1.4:1.0)) * f.swing * windScale;
-      // erratic gust-driven lateral push + small noise
       const noise = (Math.sin((f.x+f.t)*0.05)+Math.cos((f.y-f.t)*0.04))*0.15*DPR;
       f.x += f.vx + sway*0.02 + gust.val*(wind ? 0.36 : 0.12)*(0.6+f.z) + noise;
       f.y += f.vy * (0.9 + (wind?0.25:0.0));
@@ -638,8 +625,8 @@ petalFX.load(["sprites/blossoms/petal1.png","sprites/blossoms/petal2.png","sprit
 const rainFX = new RainSystem(); const snowFX = new SnowSystem();
 let running=true;
 let enableCaustics=false, raysIntensity=0.8;
-let currentWaterMask=null;         // normalized polygon (0..1)
-const baseMeta={ w:0, h:0 };      // natural image dimensions
+let currentWaterMask=null;               // normalized polygon (0..1)
+const baseMeta={ w:0, h:0 };            // natural image dimensions
 function loop(){ if(!running) return;
   ctx.clearRect(0,0,fx.width,fx.height);
 
@@ -654,7 +641,7 @@ function loop(){ if(!running) return;
 }
 requestAnimationFrame(loop);
 
-/* ===================== FIRE / CAMPFIRE ===================== */
+/* ===================== FIRE / CAMPFIRE (winter) ===================== */
 class FireSprite{ constructor(el){ this.el=el; this.cfg=null; this.frame=0; this.timer=null; this.total=0; }
   load(cfg){ this.cfg=cfg; this.frame=0; this.total=cfg.cols*cfg.rows; this.el.style.backgroundImage=`url('${cfg.url}')`;
     this.el.style.width=cfg.frameW+'px'; this.el.style.height=cfg.frameH+'px'; this.el.style.backgroundSize=`${cfg.cols*100}% ${cfg.rows*100}%`; }
@@ -670,7 +657,7 @@ const fireSprite = new FireSprite(document.getElementById('fire-sprite'));
 const $ = s => document.querySelector(s);
 const baseImg = $('#baseImg'), bgUnderlay = $('#bgUnderlay');
 const heatHazeSvg = $('#heatHazeSvg'), heatHazeImg = $('#heatHazeImg');
-const hotspotsEl = $('#hotspots'), seasonPicker = $('#season-picker'), loader = $('#loader'), controls = $('#controls');
+const seasonPicker = $('#season-picker'), loader = $('#loader'), controls = $('#controls');
 const changeSeasonBtn = $('#changeSeasonBtn'), toggleControlsBtn = $('#toggleControlsBtn'), muteBtn = $('#muteBtn'), hotspotDebugBtn = $('#hotspotDebugBtn');
 const fullscreenBtn = $('#fullscreenBtn');
 const elementsPanel = $('#elementsPanel'), elementsList = $('#elementsList');
@@ -690,7 +677,7 @@ const rainWrapEl = $('#rainWrap'), snowWrapEl = $('#snowWrap');
 let currentSeasonKey=null, currentCfg=null, fireplaceBounds=null, hotspotDebug=false;
 let overlayState = {};          // {key:boolean}
 let overlayImgs  = {};          // {key: HTMLImageElement}
-const STORE_KEY='ambience.settings.v4';
+const STORE_KEY='ambience.settings.v5';
 
 function saveSettings(){
   try{
@@ -711,7 +698,7 @@ function loadSettings(){ try{ return JSON.parse(localStorage.getItem(STORE_KEY))
 function showLoader(flag){ loader.style.display = flag ? 'grid' : 'none'; }
 function show(el, on) { if (!el) return; el.style.display = on ? '' : 'none'; }
 
-/* ------- Overlays (Picnic) as real <img> with fade ------- */
+/* ------- Overlays (Picnic/Pumpkins) as full-frame <img> with fade ------- */
 function clearOverlayImages(){ Object.values(overlayImgs).forEach(img => img.remove()); overlayImgs = {}; }
 function ensureOverlayImage(def){
   if (overlayImgs[def.key]) return overlayImgs[def.key];
@@ -733,7 +720,7 @@ function buildOverlayControls(){
   const defs = currentCfg.overlays || [];
   if (!defs.length){ overlayState = {}; elementsPanel.style.display='none'; return; }
 
-  // Start overlays from defaults, then override from saved EXCEPT items marked alwaysOff
+  // Start overlays from defaults, then override from saved (except items marked alwaysOff)
   overlayState = Object.fromEntries(defs.map(d => [d.key, !!d.default]));
   const saved = loadSettings();
   if (saved && saved.season===currentSeasonKey && saved.overlays){
@@ -743,7 +730,6 @@ function buildOverlayControls(){
       if (def.alwaysOff) { overlayState[k] = false; } else { overlayState[k] = !!saved.overlays[k]; }
     }
   }
-  // hard-enforce alwaysOff on load
   defs.forEach(d => { if (d.alwaysOff) overlayState[d.key] = false; });
 
   defs.forEach(d=>{
@@ -765,9 +751,8 @@ function updateVisibilityForSeason() {
   show(snowChipEl, allow.snow);   show(snowWrapEl, allow.snow);
   show(blossomChipEl, !!allow.blossom); show(blossomWrapEl, !!allow.blossom);
   const leavesAllowed = !!allow.leaves; show(leavesChipEl, leavesAllowed); show(leavesWrapEl, leavesAllowed);
-
   // Campfire chip only if winter scene says so
-  fireLbl.textContent = 'Campfire';
+  document.getElementById('fireLbl').textContent = 'Campfire';
   show(fireChip, !!currentCfg?.hasFireplace);
 }
 function enforceSeasonConstraints() {
@@ -782,14 +767,14 @@ function enforceSeasonConstraints() {
 async function loadSeason(key){
   currentSeasonKey = key; currentCfg = SCENES[key]; showLoader(true);
 
-  // Preload base to get natural size
+  // Preload base to get natural size for caustics mapping
   await new Promise(res=>{
     const i=new Image();
     i.onload=()=>{ baseMeta.w=i.naturalWidth; baseMeta.h=i.naturalHeight; res(); };
     i.onerror=res; i.src=currentCfg.image;
   });
   baseImg.src = currentCfg.image; bgUnderlay.src = currentCfg.image;
-  heatHazeImg.setAttribute('href', currentCfg.image);
+  document.getElementById('heatHazeImg').setAttribute('href', currentCfg.image);
   document.getElementById('heatHazeSvg').style.display = (key==='summer') ? 'block' : 'none';
 
   // Summer extras
@@ -797,7 +782,7 @@ async function loadSeason(key){
   raysIntensity  = (key==='summer') ? 0.5 : 0.85;
   currentWaterMask = (key==='summer') ? currentCfg.waterMask : null;
 
-  // reset overlays (canvases)
+  // reset overlays/hotspots
   document.getElementById('overlays').innerHTML=''; document.getElementById('hotspots').innerHTML='';
   fireplaceBounds=null;
 
@@ -826,8 +811,8 @@ async function loadSeason(key){
   leavesOn.checked   = v ? v.leavesOn  : def.leavesOn;
   if (fireOn) fireOn.checked = v ? !!v.fireOn : def.fireOn;
 
-  rainIntensity.value = Math.round(100*(v ? v.rainIntensity : def.rainIntensity));
-  snowIntensity.value = Math.round(100*(v ? v.snowIntensity : def.snowIntensity));
+  rainIntensity.value    = Math.round(100*(v ? v.rainIntensity    : def.rainIntensity));
+  snowIntensity.value    = Math.round(100*(v ? v.snowIntensity    : def.snowIntensity));
   blossomIntensity.value = Math.round(100*(v ? v.blossomIntensity : def.blossomIntensity));
   leavesIntensity.value  = Math.round(100*(v ? v.leavesIntensity  : def.leavesIntensity));
 
@@ -908,7 +893,7 @@ function toggleFire(){ fireOn.checked ? extinguishFire() : lightFire(); }
 function updateMuteButton(){ muteBtn.textContent = globalMuted ? '🔊 Unmute' : '🔇 Mute'; applyVolumes(); }
 function toggleMute(){ globalMuted = !globalMuted; updateMuteButton(); saveSettings(); }
 
-/* ------- Fullscreen ------- */
+/* ------- Fullscreen (fixed: no duplicate const) ------- */
 if (fullscreenBtn) {
   fullscreenBtn.addEventListener('click', ()=>{
     if (document.fullscreenElement) document.exitFullscreen();
@@ -942,10 +927,10 @@ document.getElementById('season-picker').addEventListener('click', (e)=>{
   unlockAudio();
   loadSeason(card.dataset.season);
 });
-changeSeasonBtn.addEventListener('click', ()=>{ seasonPicker.style.display='grid'; controls.style.display='none'; });
-toggleControlsBtn.addEventListener('click', ()=>{ controls.style.display = (controls.style.display==='none' || !controls.style.display) ? 'grid' : 'none'; showUI(); });
-muteBtn.addEventListener('click', toggleMute);
-hotspotDebugBtn.addEventListener('click', ()=>{
+document.getElementById('changeSeasonBtn').addEventListener('click', ()=>{ seasonPicker.style.display='grid'; controls.style.display='none'; });
+document.getElementById('toggleControlsBtn').addEventListener('click', ()=>{ controls.style.display = (controls.style.display==='none' || !controls.style.display) ? 'grid' : 'none'; showUI(); });
+document.getElementById('muteBtn').addEventListener('click', toggleMute);
+document.getElementById('hotspotDebugBtn').addEventListener('click', ()=>{
   hotspotDebug = !hotspotDebug;
   document.querySelectorAll('.hotspot').forEach(h => hotspotDebug ? h.classList.add('debug') : h.classList.remove('debug'));
 });
@@ -958,15 +943,11 @@ if (fireOn) fireOn.addEventListener('change', ()=> fireOn.checked ? lightFire() 
 window.addEventListener('keydown', (e)=>{
   if (e.key==='m' || e.key==='M') toggleMute();
   if (e.key==='c' || e.key==='C') { controls.style.display = (controls.style.display==='none'||!controls.style.display) ? 'grid' : 'none'; showUI(); }
-  if (e.key==='s' || e.key==='S') { changeSeasonBtn.click(); }
-  if (e.key==='h' || e.key==='H') { hotspotDebugBtn.click(); }
+  if (e.key==='s' || e.key==='S') { document.getElementById('changeSeasonBtn').click(); }
+  if (e.key==='h' || e.key==='H') { document.getElementById('hotspotDebugBtn').click(); }
 });
 
 window.addEventListener('resize', ()=>{
-  if (currentCfg?.fireHotspot){
-    const hot=document.querySelector('.hotspot'); if(hot) positionHotspot(hot, currentCfg.fireHotspot);
-    fireplaceBounds = pctBoxToPx(currentCfg.fireHotspot); placeFireSprite();
-  }
   if (currentCfg){ const floorPx = fx.height * (currentCfg.floorY/100); rainFX.setFloorY(floorPx); }
 });
 
