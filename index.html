@@ -63,26 +63,58 @@
   .hotspot:focus-visible { outline:none; border-color:rgba(255,255,255,.7); }
   .hotspot.debug { border-color: rgba(255,255,255,.35); }
 
-  /* Season picker */
-  #season-picker { position:fixed; inset:0; z-index:var(--z-overlay);
-    background:linear-gradient(180deg, rgba(6,8,10,.85), rgba(6,8,10,.85));
-    display:grid; place-items:center; padding:clamp(20px,4vw,40px); }
-  .picker-panel { width:min(920px,96vw); display:grid; gap:16px;
+  /* Season picker (now with background image) */
+  #season-picker {
+    position:fixed; inset:0; z-index:var(--z-overlay);
+    display:grid; place-items:center; padding:clamp(20px,4vw,40px);
+    isolation:isolate; /* keep pseudo-elements behind panel only */
+  }
+  /* Background.jpg behind picker + soft dim */
+  #season-picker::before {
+    content:"";
+    position:absolute; inset:0;
+    background: url("assets/background.jpg") center / cover no-repeat fixed;
+    filter: blur(10px) saturate(1.05) brightness(0.85);
+    transform: scale(1.04);  /* hide edges of blur */
+    z-index:-2;
+  }
+  #season-picker::after {
+    content:"";
+    position:absolute; inset:0;
+    background: linear-gradient(180deg, rgba(8,10,12,.80), rgba(8,10,12,.80));
+    z-index:-1;
+  }
+
+  .picker-panel {
+    width:min(920px,96vw);
+    display:grid; gap:16px;
     grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
     backdrop-filter:blur(var(--ui-blur)); -webkit-backdrop-filter:blur(var(--ui-blur));
-    background:var(--ui-bg); border:1px solid var(--ui-border); border-radius:16px; padding:20px; }
+    background:var(--ui-bg); border:1px solid var(--ui-border); border-radius:16px; padding:20px;
+  }
   .picker-header { grid-column:1/-1; display:flex; align-items:center; justify-content:space-between;
     padding-bottom:8px; border-bottom:1px solid var(--ui-border); gap:8px; }
   .picker-header h1 { font-size:clamp(18px,3vw,22px); margin:0; font-weight:650; }
   .picker-grid { grid-column:1/-1; display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
-  .season-card { position:relative; border-radius:12px; overflow:hidden; border:1px solid var(--ui-border);
-    aspect-ratio:4/3; display:flex; align-items:end; isolation:isolate; cursor:pointer; background:#151a1f; }
-  .season-card img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
-    filter:brightness(.9); transform:scale(1.02); transition:transform .3s ease, filter .3s ease; z-index:0; }
+
+  .season-card {
+    --card-r: 12px;
+    position:relative; border-radius:var(--card-r); overflow:hidden; border:1px solid var(--ui-border);
+    aspect-ratio:4/3; display:flex; align-items:flex-end; isolation:isolate; cursor:pointer; background:#151a1f;
+  }
+  .season-card img {
+    position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+    filter:brightness(.9); transform:scale(1.02); transition:transform .3s ease, filter .3s ease; z-index:0;
+  }
   .season-card:hover img { transform:scale(1.06); filter:brightness(1); }
-  .season-label { position:relative; z-index:1; width:100%; padding:10px 12px;
-    background:linear-gradient(180deg, transparent, rgba(0,0,0,.6));
-    font-weight:650; letter-spacing:.3px; text-shadow:0 2px 8px rgba(0,0,0,.6); }
+  /* FIX: make the gradient bar respect rounded corners */
+  .season-label {
+    position:absolute; left:0; right:0; bottom:0;
+    padding:10px 12px;
+    background:linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.55) 60%, rgba(0,0,0,.75) 100%);
+    font-weight:650; letter-spacing:.3px; text-shadow:0 2px 8px rgba(0,0,0,.6);
+    border-bottom-left-radius:var(--card-r); border-bottom-right-radius:var(--card-r);
+  }
 
   /* Top bar + controls */
   #topbar { position:fixed; left:14px; top:14px; z-index:var(--z-ui); display:flex; gap:8px;
@@ -265,7 +297,7 @@ const SCENES = {
     hasFireplace: true,                 // winter ONLY (Campfire)
     fireHotspot: { x: 68, y: 70, w: 14, h: 22 },
     fireSprite: null,                   // add sprite sheet later if you like
-    floorY: 92,
+    floorY: 95,                         // ⬅ floor lowered to 95
     allow: { rain: false, snow: true, leaves: false, blossom: false },
     overlays: [],
     defaults: {
@@ -281,7 +313,7 @@ const SCENES = {
     image: "assets/spring.jpg",
     hasFireplace:false,
     fireHotspot:null, fireSprite:null,
-    floorY: 90,
+    floorY: 95,                         // ⬅ 95
     allow: { rain: true, snow: false, leaves: false, blossom: true },
     overlays: [],
     defaults: {
@@ -297,7 +329,7 @@ const SCENES = {
     image: "assets/summer.jpg",
     hasFireplace:false,
     fireHotspot:null, fireSprite:null,
-    floorY: 91,
+    floorY: 95,                         // ⬅ 95
     allow: { rain: false, snow: false, leaves: false, blossom:false },
     overlays: [
       { key:"picnic", label:"🧺 Picnic", url:"assets/summer_picnic.png", default:false, alwaysOff:true }
@@ -320,7 +352,7 @@ const SCENES = {
     image: "assets/fall.jpg",
     hasFireplace:false,                 // no fireplace in Fall
     fireHotspot:null, fireSprite:null,
-    floorY: 92,
+    floorY: 95,                         // ⬅ 95
     allow: { rain: true, snow: false, leaves: true, blossom:false },
     overlays: [
       { key:"pumpkins", label:"🎃 Pumpkins", url:"assets/fall_pumpkins.png", default:false }
@@ -472,7 +504,7 @@ const Caustics = (()=>{
 
 /* --------- SPLASHES (rain impact) --------- */
 class SplashSystem {
-  constructor(){ this.jets=[]; this.ripples=[]; this.enabled=true; this.floorYpx = fx.height*0.92; }
+  constructor(){ this.jets=[]; this.ripples=[]; this.enabled=true; this.floorYpx = fx.height*0.95; }
   setEnabled(on){ this.enabled = on; } setFloorY(yPx){ this.floorYpx = yPx; }
   spawn(x, strength=1){ if (!this.enabled) return;
     const n=3+Math.floor(Math.random()*3);
@@ -498,7 +530,7 @@ class SplashSystem {
 
 /* --------- RAIN --------- */
 class RainSystem {
-  constructor(){ this.drops=[]; this.intensity=0; this.floorYpx=fx.height*0.92; this.enabled=false; this.splashes=new SplashSystem(); }
+  constructor(){ this.drops=[]; this.intensity=0; this.floorYpx=fx.height*0.95; this.enabled=false; this.splashes=new SplashSystem(); }
   setEnabled(on){ this.enabled = on; } setSplashes(on){ this.splashes.setEnabled(on); }
   setFloorY(yPx){ this.floorYpx=yPx; this.splashes.setFloorY(yPx); }
   setIntensity(f){ this.intensity = clamp01(f); }
@@ -674,10 +706,10 @@ const leavesChipEl = $('#leavesChip'), leavesWrapEl = $('#leavesWrap');
 const blossomChipEl = $('#blossomChip'), blossomWrapEl = $('#blossomWrap');
 const rainWrapEl = $('#rainWrap'), snowWrapEl = $('#snowWrap');
 
-let currentSeasonKey=null, currentCfg=null, fireplaceBounds=null, hotspotDebug=false;
+let currentSeasonKey=null, currentCfg=null, hotspotDebug=false;
 let overlayState = {};          // {key:boolean}
 let overlayImgs  = {};          // {key: HTMLImageElement}
-const STORE_KEY='ambience.settings.v5';
+const STORE_KEY='ambience.settings.v6';
 
 function saveSettings(){
   try{
@@ -706,13 +738,12 @@ function ensureOverlayImage(def){
   document.getElementById('bgStack').appendChild(img); overlayImgs[def.key] = img; return img;
 }
 function syncOverlayImages(){
-  const defs = currentCfg.overlays || [];
-  defs.forEach(def=>{
+  (currentCfg.overlays || []).forEach(def=>{
     const want = !!overlayState[def.key];
     const img = ensureOverlayImage(def);
     if (want) img.classList.add('on'); else img.classList.remove('on');
   });
-  elementsPanel.style.display = defs.length ? '' : 'none';
+  elementsPanel.style.display = (currentCfg.overlays || []).length ? '' : 'none';
 }
 function buildOverlayControls(){
   elementsList.innerHTML = '';
@@ -720,7 +751,6 @@ function buildOverlayControls(){
   const defs = currentCfg.overlays || [];
   if (!defs.length){ overlayState = {}; elementsPanel.style.display='none'; return; }
 
-  // Start overlays from defaults, then override from saved (except items marked alwaysOff)
   overlayState = Object.fromEntries(defs.map(d => [d.key, !!d.default]));
   const saved = loadSettings();
   if (saved && saved.season===currentSeasonKey && saved.overlays){
@@ -753,7 +783,7 @@ function updateVisibilityForSeason() {
   const leavesAllowed = !!allow.leaves; show(leavesChipEl, leavesAllowed); show(leavesWrapEl, leavesAllowed);
   // Campfire chip only if winter scene says so
   document.getElementById('fireLbl').textContent = 'Campfire';
-  show(fireChip, !!currentCfg?.hasFireplace);
+  show(document.getElementById('fireChip'), !!currentCfg?.hasFireplace);
 }
 function enforceSeasonConstraints() {
   const allow = currentCfg?.allow || {};
@@ -784,7 +814,6 @@ async function loadSeason(key){
 
   // reset overlays/hotspots
   document.getElementById('overlays').innerHTML=''; document.getElementById('hotspots').innerHTML='';
-  fireplaceBounds=null;
 
   // build overlay UI + layers
   buildOverlayControls();
@@ -794,9 +823,6 @@ async function loadSeason(key){
     const hot=document.createElement('button'); hot.className='hotspot'; hot.title='Toggle campfire'; hot.setAttribute('aria-label','Toggle campfire');
     document.getElementById('hotspots').appendChild(hot); positionHotspot(hot, currentCfg.fireHotspot); hot.addEventListener('click', ()=> toggleFire());
     if (hotspotDebug) hot.classList.add('debug');
-    fireplaceBounds = pctBoxToPx(currentCfg.fireHotspot);
-    if (currentCfg.fireSprite) fireSprite.load(currentCfg.fireSprite);
-    placeFireSprite();
   } else {
     fireSprite.stop();
   }
@@ -844,10 +870,6 @@ async function loadSeason(key){
 function pctBoxToPx(box){ const vw=window.innerWidth, vh=window.innerHeight; return { left:vw*(box.x/100), top:vh*(box.y/100), width:vw*(box.w/100), height:vh*(box.h/100) }; }
 function positionHotspot(el, pct){ const r=pctBoxToPx(pct);
   el.style.left=r.left+'px'; el.style.top=r.top+'px'; el.style.width=r.width+'px'; el.style.height=r.height+'px'; }
-function placeFireSprite(){ if(!fireplaceBounds || !currentCfg?.fireSprite) return;
-  const {left,top,width,height}=fireplaceBounds; const cx=left+width/2, cy=top+height/2;
-  fireSprite.place(cx,cy,1.0);
-}
 
 /* ------- Weather/Audio ------- */
 function applyWeather(){
@@ -893,7 +915,8 @@ function toggleFire(){ fireOn.checked ? extinguishFire() : lightFire(); }
 function updateMuteButton(){ muteBtn.textContent = globalMuted ? '🔊 Unmute' : '🔇 Mute'; applyVolumes(); }
 function toggleMute(){ globalMuted = !globalMuted; updateMuteButton(); saveSettings(); }
 
-/* ------- Fullscreen (fixed: no duplicate const) ------- */
+/* ------- Fullscreen ------- */
+const fullscreenBtn = document.getElementById('fullscreenBtn');  /* reuse single const */
 if (fullscreenBtn) {
   fullscreenBtn.addEventListener('click', ()=>{
     if (document.fullscreenElement) document.exitFullscreen();
@@ -951,7 +974,7 @@ window.addEventListener('resize', ()=>{
   if (currentCfg){ const floorPx = fx.height * (currentCfg.floorY/100); rainFX.setFloorY(floorPx); }
 });
 
-/* Show picker first */
+/* Start: show the picker */
 seasonPicker.style.display='grid'; controls.style.display='none';
 </script>
 </body>
