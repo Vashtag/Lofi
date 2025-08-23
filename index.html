@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
 <title>Seasons Ambience</title>
-<meta name="description" content="Interactive ambience — choose a season, weather, and per‑season elements like a picnic."/>
+<meta name="description" content="Interactive ambience — choose a season, weather, overlays like a picnic, with god rays, heat haze, and water caustics."/>
 <style>
   :root{
     --ui-bg: rgba(20,22,24,.55);
@@ -14,6 +14,7 @@
     --ui-accent: #91d5ff;
     --ui-muted: #b9c0c7;
     --panel-w: min(420px, 92vw);
+
     --z-scene: 0;
     --z-canvas: 1;
     --z-overlays: 2;
@@ -21,41 +22,55 @@
     --z-hotspots: 4;
     --z-ui: 5;
     --z-overlay: 6;
+
+    /* Parallax offsets (updated in JS) */
+    --parallaxX: 0px;
+    --parallaxY: 0px;
   }
 
   *{ box-sizing: border-box; }
   html, body { height:100%; margin:0; background:#0b0e12; color:var(--ui-text);
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial; }
 
+  /* Utility: any element with .parallax will shift together */
+  .parallax{
+    transform: translate3d(var(--parallaxX), var(--parallaxY), 0);
+    will-change: transform;
+    transition: transform 120ms ease-out;
+  }
+
   /* Scene container with stacked <img> layers */
   #scene { position:fixed; inset:0; z-index:var(--z-scene); }
-
   #bgRoot { position:absolute; inset:0; overflow:hidden; }
-  /* Underlay: blurred, slightly enlarged copy of the base image to hide any seams */
+  /* Underlay: blurred copy of base to hide seams during load/resize */
   #bgUnderlay { position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
     filter: blur(26px) brightness(0.98); transform: scale(1.08); transform-origin:center; }
-  /* Stack: base image + visual overlays */
   #bgStack { position:absolute; inset:0; }
   .bg-img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
     user-select:none; pointer-events:none; image-rendering:auto; }
-  /* Overlay images fade quickly */
   .bg-overlay { opacity:0; transition: opacity 120ms ease-in-out; }
   .bg-overlay.on { opacity:1; }
 
-  /* FX canvas (rain/snow/leaves) */
+  /* FX canvas (rain/snow/leaves + god rays + caustics) */
   #fx { position:fixed; inset:0; z-index:var(--z-canvas); pointer-events:none; }
+
+  /* Heat-haze (SVG displacement overlay; summer only) */
+  #heatHazeSvg{ position:fixed; inset:0; z-index:var(--z-canvas); pointer-events:none; display:none; }
+  #heatHazeImg{ width:100%; height:100%; }
 
   /* Overlays (lamp glows & window canvases) */
   #overlays { position:fixed; inset:0; z-index:var(--z-overlays); pointer-events:none; }
   .lamp-glow { position:fixed; width:300px; height:300px; left:50%; top:50%;
-    transform:translate(-50%,-50%); border-radius:50%; mix-blend-mode:screen; pointer-events:none;
+    transform:translate(calc(-50% + var(--parallaxX)), calc(-50% + var(--parallaxY)));
+    border-radius:50%; mix-blend-mode:screen; pointer-events:none;
     animation: lampFlicker 1.8s infinite steps(6, end); }
   @keyframes lampFlicker { 0%{filter:brightness(.95);} 50%{filter:brightness(1.05);} 100%{filter:brightness(.95);} }
   .window-overlay { position:fixed; pointer-events:none; }
 
-  /* Fire sprite */
+  /* Fire sprite (transform uses parallax vars so it stays aligned) */
   #fire-sprite { position:fixed; z-index:var(--z-sprite); width:0; height:0; display:none;
-    background-repeat:no-repeat; image-rendering:auto; pointer-events:none; will-change:background-position; }
+    background-repeat:no-repeat; image-rendering:auto; pointer-events:none; will-change:background-position;
+    transform: translate(calc(-50% + var(--parallaxX)), calc(-50% + var(--parallaxY))) scale(1); }
 
   /* Hotspots */
   #hotspots { position:fixed; inset:0; z-index:var(--z-hotspots); pointer-events:none; }
@@ -86,13 +101,15 @@
     font-weight:650; letter-spacing:.3px; text-shadow:0 2px 8px rgba(0,0,0,.6); }
 
   /* Top bar + controls */
-  #topbar { position:fixed; left:14px; top:14px; z-index:var(--z-ui); display:flex; gap:8px; }
+  #topbar { position:fixed; left:14px; top:14px; z-index:var(--z-ui); display:flex; gap:8px;
+    transition: opacity .25s ease, transform .25s ease; }
   .btn { display:inline-flex; align-items:center; gap:8px; border:1px solid var(--ui-border);
     padding:8px 12px; border-radius:24px; background:rgba(255,255,255,.06);
     color:var(--ui-text); text-decoration:none; cursor:pointer; font-weight:650; }
   .btn[disabled]{ opacity:.5; cursor:not-allowed; }
 
-  #controls { position:fixed; right:14px; bottom:14px; width:var(--panel-w); z-index:var(--z-ui); display:grid; gap:10px; user-select:none; }
+  #controls { position:fixed; right:14px; bottom:14px; width:var(--panel-w); z-index:var(--z-ui); display:grid; gap:10px; user-select:none;
+    transition: opacity .25s ease, transform .25s ease; }
   .panel { backdrop-filter:blur(var(--ui-blur)); -webkit-backdrop-filter:blur(var(--ui-blur));
     background:var(--ui-bg); border:1px solid var(--ui-border); border-radius:14px; padding:12px; }
   .panel h2 { margin:0 0 6px 0; font-size:14px; font-weight:700; color:var(--ui-muted); letter-spacing:.4px; text-transform:uppercase; }
@@ -115,14 +132,21 @@
     border-top-color:var(--ui-accent); animation:spin 1s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
 
+  /* Auto-hide UI (applies to both topbar and control panel) */
+  body.ui-hidden #topbar    { opacity:0; transform: translateY(-8px); pointer-events:none; }
+  body.ui-hidden #controls  { opacity:0; transform: translateY( 8px); pointer-events:none; }
+
   @media (max-width: 720px){ #controls{ right:10px; left:10px; width:auto; } }
-  @media (prefers-reduced-motion: reduce){ .season-card img{ transition:none; } }
+  @media (prefers-reduced-motion: reduce){
+    .season-card img{ transition:none; }
+    .parallax     { transition:none; }
+  }
 </style>
 </head>
 <body>
 
   <!-- Scene behind everything -->
-  <div id="scene" role="img" aria-label="Ambience background">
+  <div id="scene" class="parallax" role="img" aria-label="Ambience background">
     <div id="bgRoot">
       <img id="bgUnderlay" alt="">
       <div id="bgStack">
@@ -132,22 +156,47 @@
     </div>
   </div>
 
-  <!-- Global particle canvas (rain/snow/leaves) -->
-  <canvas id="fx"></canvas>
+  <!-- Global FX canvas (rain/snow/leaves + god rays + caustics) -->
+  <canvas id="fx" class="parallax"></canvas>
+
+  <!-- Heat-haze SVG (summer only) -->
+  <svg id="heatHazeSvg" class="parallax" viewBox="0 0 100 100" preserveAspectRatio="none">
+    <defs>
+      <!-- Displacement noise -->
+      <filter id="heatHazeFilter">
+        <feTurbulence type="fractalNoise" baseFrequency="0.012 0.02" numOctaves="2" seed="7" result="turb">
+          <animate attributeName="baseFrequency" dur="6s" values="0.012 0.02;0.017 0.03;0.012 0.02" repeatCount="indefinite"/>
+          <animate attributeName="seed" dur="8s" values="7;9;11;7" repeatCount="indefinite"/>
+        </feTurbulence>
+        <feDisplacementMap in="SourceGraphic" in2="turb" scale="6" xChannelSelector="R" yChannelSelector="G">
+          <animate attributeName="scale" dur="7s" values="4;7;5;6;4" repeatCount="indefinite"/>
+        </feDisplacementMap>
+      </filter>
+      <!-- Clip to a low horizontal band (approx heat shimmer near ground/water) -->
+      <clipPath id="hazeClip">
+        <rect x="0" y="58" width="100" height="42" />
+      </clipPath>
+    </defs>
+    <!-- We draw the same scene image again, displaced & faint -->
+    <image id="heatHazeImg" href="" x="0" y="0" width="100" height="100"
+           preserveAspectRatio="xMidYMid slice" filter="url(#heatHazeFilter)"
+           clip-path="url(#hazeClip)" opacity="0.12" style="mix-blend-mode:screen;"></image>
+  </svg>
 
   <!-- Overlays (lamp glows, window canvases, etc.) -->
-  <div id="overlays"></div>
+  <div id="overlays" class="parallax"></div>
 
   <!-- Fire sprite -->
-  <div id="fire-sprite" aria-hidden="true"></div>
+  <div id="fire-sprite"></div>
 
   <!-- Hotspots -->
-  <div id="hotspots"></div>
+  <div id="hotspots" class="parallax"></div>
 
   <!-- Top bar -->
   <div id="topbar" class="panel">
-    <button id="changeSeasonBtn" class="btn" title="Change season (S)">🌗 Change Season</button>
+    <button id="changeSeasonBtn" class="btn" title="Change season (S)">🌗 Change</button>
     <button id="toggleControlsBtn" class="btn" title="Show/Hide controls (C)">🎛 Controls</button>
+    <button id="fullscreenBtn" class="btn" title="Fullscreen (F)">⛶ Fullscreen</button>
     <button id="muteBtn" class="btn" title="Mute/Unmute (M)">🔇 Mute</button>
     <button id="hotspotDebugBtn" class="btn" title="Show/Hide hotspot boxes (H)">🧪 Hotspots</button>
   </div>
@@ -276,7 +325,8 @@ const SCENES = {
     allow: { rain: false, snow: false, leaves: false },
     props: [],
     overlays: [
-      { key:"picnic", label:"Picnic", url:"assets/summer_picnic.png", default:false }
+      /* ALWAYS OFF ON LOAD: enforce in buildOverlayControls */
+      { key:"picnic", label:"Picnic", url:"assets/summer_picnic.png", default:false, alwaysOff:true }
     ],
     defaults: {
       rainOn:false, snowOn:false, windOn:true, splashesOn:true, fireOn:false,
@@ -345,7 +395,80 @@ function updateGust(windOn) {
   gust.val = (base + wave) * DPR;
 }
 
-/* Splashes */
+/* --------- GOD RAYS (screen-blended soft beams) ---------- */
+const GodRays = (()=> {
+  let t=0;
+  function draw(intensity=0.8){
+    const W=fx.width, H=fx.height; if(!W||!H) return;
+    t += 0.003;
+    const sx = W*0.16, sy = H*0.12; // source
+    const beams = 7, span = Math.PI/3.2;
+    ctx.save();
+    ctx.globalCompositeOperation='screen';
+    ctx.filter='blur(8px)';
+    ctx.translate(sx, sy);
+    for(let i=0;i<beams;i++){
+      const a = -span/2 + (i/(beams-1))*span + Math.sin(t*0.7 + i)*0.02;
+      ctx.save(); ctx.rotate(a);
+      const w = (H*0.28) * (0.65 + 0.45*Math.sin(t*0.9 + i));
+      const g = ctx.createLinearGradient(0,0,W*0.9,0);
+      const alpha = 0.06 * intensity;
+      g.addColorStop(0, `rgba(255,245,210,${alpha})`);
+      g.addColorStop(0.25, `rgba(255,245,210,${alpha*0.6})`);
+      g.addColorStop(1, `rgba(255,245,210,0)`);
+      ctx.fillStyle = g;
+      ctx.fillRect(0,-w/2, W, w);
+      ctx.restore();
+    }
+    ctx.filter='none';
+    ctx.restore();
+  }
+  return { draw };
+})();
+
+/* --------- CAUSTICS (summer, additive bottom-band) --------- */
+const Caustics = (()=>{
+  const off = document.createElement('canvas'); const g = off.getContext('2d');
+  let t=0;
+  function ensure(size=180){ if(off.width===size) return; off.width=off.height=size; }
+  function draw(enabled, alpha=0.14){
+    if(!enabled) return;
+    const W=fx.width, H=fx.height; if(!W||!H) return;
+    ensure(160); t+=0.03;
+    // generate small tile with interference pattern
+    const imgData = g.createImageData(off.width, off.height);
+    const d = imgData.data, w=off.width, h=off.height;
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const nx=x/w, ny=y/h;
+        const v =
+          (Math.sin( (nx*15 + t) ) + Math.sin( (ny*19 + t*1.2) ) +
+           Math.sin( (nx*12 + ny*8 + t*0.8) ))/3;
+        const c = Math.max(0, v*255);
+        const idx=(y*w+x)*4; d[idx]=d[idx+1]=d[idx+2]=255; d[idx+3]=c;
+      }
+    }
+    g.putImageData(imgData,0,0);
+    const pattern = ctx.createPattern(off,'repeat');
+    ctx.save();
+    ctx.globalCompositeOperation='screen';
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = pattern;
+    // bottom 35% with soft vertical fade
+    const grad = ctx.createLinearGradient(0, H*0.65, 0, H);
+    grad.addColorStop(0,'rgba(255,255,255,0)');
+    grad.addColorStop(1,'rgba(255,255,255,1)');
+    ctx.fillStyle = pattern;
+    ctx.beginPath(); ctx.rect(0, H*0.65, W, H*0.35); ctx.fill();
+    // apply fade mask by overlaying gradient in destination-in mode
+    ctx.globalCompositeOperation='destination-in';
+    ctx.fillStyle=grad; ctx.fillRect(0, H*0.65, W, H*0.35);
+    ctx.restore();
+  }
+  return { draw };
+})();
+
+/* --------- SPLASHES (rain impact) --------- */
 class SplashSystem {
   constructor(){ this.jets=[]; this.ripples=[]; this.enabled=true; this.floorYpx = fx.height*0.92; }
   setEnabled(on){ this.enabled = on; } setFloorY(yPx){ this.floorYpx = yPx; }
@@ -371,7 +494,7 @@ class SplashSystem {
       for (let r of this.ripples){ ctx.globalAlpha=r.alpha; ctx.lineWidth=r.width; ctx.beginPath(); ctx.arc(r.x,r.y,r.r,0,Math.PI*2); ctx.stroke(); } ctx.restore(); } }
 }
 
-/* Rain */
+/* --------- RAIN --------- */
 class RainSystem {
   constructor(){ this.drops=[]; this.intensity=0; this.floorYpx=fx.height*0.92; this.enabled=false; this.splashes=new SplashSystem(); }
   setEnabled(on){ this.enabled = on; } setSplashes(on){ this.splashes.setEnabled(on); }
@@ -400,7 +523,7 @@ class RainSystem {
     ctx.restore(); this.splashes.draw(); }
 }
 
-/* Snow */
+/* --------- SNOW --------- */
 function makeFlakeSprite(r){ const c=document.createElement('canvas'); c.width=c.height=Math.ceil(r*2+2);
   const g=c.getContext('2d'); const cx=c.width/2, cy=c.height/2;
   const grd=g.createRadialGradient(cx,cy,0,cx,cy,r);
@@ -421,7 +544,7 @@ class SnowSystem{
   draw(){ if(!this.enabled||this.intensity<=0) return; ctx.save(); for(let f of this.flakes){ ctx.globalAlpha=f.alpha; ctx.drawImage(f.s,f.x-f.s.width/2,f.y-f.s.height/2); } ctx.restore(); }
 }
 
-/* Leaves (autumn) */
+/* --------- LEAVES (autumn) --------- */
 class LeafSystem{
   constructor(){ this.enabled=false; this.intensity=0; this.leaves=[]; this.sprites=[]; this.ready=false; this.fallbackColors=['#c55c18','#d79a2e','#9a5a1a','#bf6f24']; }
   async load(urls){ const loads=urls.map(u=>new Promise(res=>{ const img=new Image(); img.onload=()=>res(img); img.onerror=()=>res(null); img.src=u; }));
@@ -447,13 +570,21 @@ class LeafSystem{
 const leafFX = new LeafSystem();
 leafFX.load(["sprites/leaves/leaf1.png","sprites/leaves/leaf2.png","sprites/leaves/leaf3.png"]).catch(()=>{});
 
-/* Render loop */
+/* --------- RENDER LOOP --------- */
 const rainFX = new RainSystem(); const snowFX = new SnowSystem();
 let running=true;
-function loop(){ if(!running) return; ctx.clearRect(0,0,fx.width,fx.height);
+let enableHaze=false, enableCaustics=false, raysIntensity=0.8;
+function loop(){ if(!running) return;
+  ctx.clearRect(0,0,fx.width,fx.height);
+
+  // Background/ambient passes first
+  if (raysIntensity>0) GodRays.draw(raysIntensity);
+  Caustics.draw(enableCaustics, 0.14);
+
   updateGust(document.getElementById('windOn').checked);
   rainFX.update(); snowFX.update(); leafFX.update();
   rainFX.draw();   snowFX.draw();   leafFX.draw();
+
   windowTrails.forEach(w => w.updateDraw());
   requestAnimationFrame(loop);
 }
@@ -463,7 +594,8 @@ requestAnimationFrame(loop);
 class FireSprite{ constructor(el){ this.el=el; this.cfg=null; this.frame=0; this.timer=null; this.total=0; }
   load(cfg){ this.cfg=cfg; this.frame=0; this.total=cfg.cols*cfg.rows; this.el.style.backgroundImage=`url('${cfg.url}')`;
     this.el.style.width=cfg.frameW+'px'; this.el.style.height=cfg.frameH+'px'; this.el.style.backgroundSize=`${cfg.cols*100}% ${cfg.rows*100}%`; }
-  place(px,py,scale=1){ this.el.style.left=px+'px'; this.el.style.top=py+'px'; this.el.style.transform=`translate(-50%,-50%) scale(${scale})`; }
+  place(px,py,scale=1){ this.el.style.left=px+'px'; this.el.style.top=py+'px';
+    this.el.style.transform=`translate(calc(-50% + var(--parallaxX)), calc(-50% + var(--parallaxY))) scale(${scale})`; }
   start(){ if(!this.cfg) return; this.el.style.display='block';
     const step=()=>{ this.frame=(this.frame+1)%this.total; const c=this.frame%this.cfg.cols, r=Math.floor(this.frame/this.cfg.cols);
       const posX=(c/(this.cfg.cols-1))*100, posY=(r/(this.cfg.rows-1))*100; this.el.style.backgroundPosition=`${posX}% ${posY}%`;
@@ -483,7 +615,7 @@ function makeLampGlow(box, color="rgba(255,210,140,0.9)", radius=320){
   return { el: d, resize(){ const px=pctBoxToPx(box); const cx=px.left+px.width/2, cy=px.top+px.height/2; d.style.left=cx+'px'; d.style.top=cy+'px'; } };
 }
 class WindowTrail { constructor(boxPct){ this.boxPct=boxPct; this.canvas=null; this.ctx=null; this.streams=[]; this.active=false; }
-  attach(){ const px=pctBoxToPx(this.boxPct); const c=document.createElement('canvas'); c.className='window-overlay';
+  attach(){ const px=pctBoxToPx(this.boxPct); const c=document.createElement('canvas'); c.className='window-overlay parallax';
     c.style.left=px.left+'px'; c.style.top=px.top+'px'; c.width=Math.max(1, Math.floor(px.width*DPR)); c.height=Math.max(1, Math.floor(px.height*DPR));
     c.style.width=px.width+'px'; c.style.height=px.height+'px'; overlaysEl.appendChild(c); this.canvas=c; this.ctx=c.getContext('2d'); this.active=true; this.buildStreams(); }
   detach(){ if(this.canvas){ this.canvas.remove(); this.canvas=null; this.ctx=null; } this.active=false; }
@@ -504,8 +636,10 @@ class WindowTrail { constructor(boxPct){ this.boxPct=boxPct; this.canvas=null; t
 /* ===================== UI & STATE ===================== */
 const $ = s => document.querySelector(s);
 const sceneEl = $('#scene'), baseImg = $('#baseImg'), bgUnderlay = $('#bgUnderlay');
+const heatHazeSvg = $('#heatHazeSvg'), heatHazeImg = $('#heatHazeImg');
 const hotspotsEl = $('#hotspots'), seasonPicker = $('#season-picker'), loader = $('#loader'), controls = $('#controls');
 const changeSeasonBtn = $('#changeSeasonBtn'), toggleControlsBtn = $('#toggleControlsBtn'), muteBtn = $('#muteBtn'), hotspotDebugBtn = $('#hotspotDebugBtn');
+const fullscreenBtn = $('#fullscreenBtn');
 const elementsPanel = $('#elementsPanel'), elementsList = $('#elementsList');
 
 const rainOn = $('#rainOn'), snowOn=$('#snowOn'), windOn=$('#windOn'), splashesOn=$('#splashesOn'), fireOn=$('#fireOn'), leavesOn=$('#leavesOn');
@@ -521,6 +655,7 @@ let overlayState = {};          // {key:boolean}
 let overlayImgs  = {};          // {key: HTMLImageElement}
 const STORE_KEY='ambience.settings.v3';
 
+/* Save/load (picnic always starts off regardless of saved) */
 function saveSettings(){
   try{
     const overlays = {};
@@ -559,8 +694,20 @@ function buildOverlayControls(){
   clearOverlayImages();
   const defs = currentCfg.overlays || [];
   if (!defs.length){ overlayState = {}; elementsPanel.style.display='none'; return; }
+
+  // Start overlays from defaults, then override from saved EXCEPT items marked alwaysOff
   overlayState = Object.fromEntries(defs.map(d => [d.key, !!d.default]));
-  const saved = loadSettings(); if (saved && saved.season===currentSeasonKey && saved.overlays){ for (const k in saved.overlays) if (k in overlayState) overlayState[k]=!!saved.overlays[k]; }
+  const saved = loadSettings();
+  if (saved && saved.season===currentSeasonKey && saved.overlays){
+    for (const k in saved.overlays){
+      const def = defs.find(d=>d.key===k);
+      if (!def) continue;
+      if (def.alwaysOff) { overlayState[k] = false; } else { overlayState[k] = !!saved.overlays[k]; }
+    }
+  }
+  // hard-enforce alwaysOff on load
+  defs.forEach(d => { if (d.alwaysOff) overlayState[d.key] = false; });
+
   defs.forEach(d=>{
     const span = document.createElement('span'); span.className='chip'; const id=`overlay-${d.key}`;
     span.innerHTML = `<input type="checkbox" id="${id}" data-overlay="${d.key}" ${overlayState[d.key]?'checked':''}><span class="lbl">${d.label}</span>`;
@@ -591,16 +738,22 @@ function enforceSeasonConstraints() {
 async function loadSeason(key){
   currentSeasonKey = key; currentCfg = SCENES[key]; showLoader(true);
 
-  // Preload base, then set it on both underlay and base
+  // Base image on both underlay and main
   await new Promise(res=>{ const i=new Image(); i.onload=res; i.onerror=res; i.src=currentCfg.image; });
-  baseImg.src = currentCfg.image;
-  bgUnderlay.src = currentCfg.image;
-  sceneEl.setAttribute('aria-label', `${currentCfg.name} ambience background`);
+  baseImg.src = currentCfg.image; bgUnderlay.src = currentCfg.image;
+  // Heat haze image (summer only)
+  heatHazeImg.setAttribute('href', currentCfg.image);
+  heatHazeSvg.style.display = (key==='summer') ? 'block' : 'none';
+
+  // Seasonal FX toggles
+  enableHaze = (key==='summer');
+  enableCaustics = (key==='summer');
+  raysIntensity = (key==='summer') ? 0.5 : 0.85;
 
   // reset overlays (canvases)
   overlaysEl.innerHTML=''; windowTrails.splice(0, windowTrails.length);
 
-  // build overlay chips (e.g., Picnic) and actual <img> layers
+  // build overlay UI + layers
   buildOverlayControls();
 
   // hotspots reset
@@ -689,7 +842,7 @@ function applyVolumes(){
   setTrackVolume('rain', (rainEnabled ? +rainVol.value/100 : 0) * Math.max(.25, +rainIntensity.value/100));
   setTrackVolume('fire',  fireOn?.checked ? +fireVol.value/100 : 0);
   setTrackVolume('wind',  windOn.checked ? +windVol.value/100 : 0);
-  setTrackVolume('birds', +birdsVol.value/100); // constant; no day-night cycle
+  setTrackVolume('birds', +birdsVol.value/100); // constant
   saveSettings();
 }
 
@@ -703,12 +856,62 @@ function toggleFire(){ fireOn.checked ? extinguishFire() : lightFire(); }
 function updateMuteButton(){ muteBtn.textContent = globalMuted ? '🔊 Unmute' : '🔇 Mute'; applyVolumes(); }
 function toggleMute(){ globalMuted = !globalMuted; updateMuteButton(); saveSettings(); }
 
+/* ------- Fullscreen ------- */
+const fullscreenBtn = document.getElementById('fullscreenBtn');
+fullscreenBtn.addEventListener('click', ()=>{
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen().catch(()=>{});
+});
+window.addEventListener('keydown', e=>{
+  if (e.key==='f' || e.key==='F') fullscreenBtn.click();
+});
+
+/* ------- Auto-hide UI after idle ------- */
+let uiIdleTimer=null, uiHover=false;
+function scheduleUIHide(){
+  clearTimeout(uiIdleTimer);
+  uiIdleTimer = setTimeout(()=>{ if(!uiHover) document.body.classList.add('ui-hidden'); }, 3500);
+}
+function showUI(){ document.body.classList.remove('ui-hidden'); scheduleUIHide(); }
+['mousemove','touchstart','keydown'].forEach(ev=>{
+  window.addEventListener(ev, showUI, {passive:true});
+});
+['mouseenter','mouseleave'].forEach(ev=>{
+  document.getElementById('topbar').addEventListener(ev, e=>{ uiHover = (ev==='mouseenter'); if(uiHover) showUI(); });
+  document.getElementById('controls').addEventListener(ev, e=>{ uiHover = (ev==='mouseenter'); if(uiHover) showUI(); });
+});
+scheduleUIHide();
+
+/* ------- Parallax (mouse + tilt) ------- */
+(function setupParallax(){
+  let targetX=0, targetY=0, curX=0, curY=0;
+  const MAX = Math.min(12, Math.max(6, Math.floor(window.innerWidth/140))); // px
+  function apply(){ curX += (targetX - curX)*0.12; curY += (targetY - curY)*0.12;
+    document.documentElement.style.setProperty('--parallaxX', `${curX.toFixed(2)}px`);
+    document.documentElement.style.setProperty('--parallaxY', `${curY.toFixed(2)}px`);
+    requestAnimationFrame(apply);
+  }
+  apply();
+  window.addEventListener('mousemove', (e)=>{
+    const nx = (e.clientX / window.innerWidth  - 0.5) * 2;
+    const ny = (e.clientY / window.innerHeight - 0.5) * 2;
+    targetX = -nx*MAX; targetY = -ny*MAX;
+  }, {passive:true});
+  // Mobile tilt (best-effort)
+  window.addEventListener('deviceorientation', (e)=>{
+    if (e.gamma==null || e.beta==null) return;
+    const nx = Math.max(-1, Math.min(1, e.gamma/30));
+    const ny = Math.max(-1, Math.min(1, e.beta/50));
+    targetX = -nx*MAX; targetY = ny*MAX*0.8;
+  });
+})();
+
 /* ------- Wiring ------- */
 document.querySelectorAll('.season-card').forEach(btn=>{
   btn.addEventListener('click', ()=>{ unlockAudio(); loadSeason(btn.dataset.season); });
 });
-changeSeasonBtn.addEventListener('click', ()=>{ seasonPicker.style.display='grid'; controls.style.display='none'; });
-toggleControlsBtn.addEventListener('click', ()=>{ controls.style.display = (controls.style.display==='none' || !controls.style.display) ? 'grid' : 'none'; });
+document.getElementById('changeSeasonBtn').addEventListener('click', ()=>{ seasonPicker.style.display='grid'; controls.style.display='none'; });
+document.getElementById('toggleControlsBtn').addEventListener('click', ()=>{ controls.style.display = (controls.style.display==='none' || !controls.style.display) ? 'grid' : 'none'; showUI(); });
 muteBtn.addEventListener('click', toggleMute);
 hotspotDebugBtn.addEventListener('click', ()=>{
   hotspotDebug = !hotspotDebug;
@@ -722,8 +925,8 @@ if (fireOn) fireOn.addEventListener('change', ()=> fireOn.checked ? lightFire() 
 
 window.addEventListener('keydown', (e)=>{
   if (e.key==='m' || e.key==='M') toggleMute();
-  if (e.key==='c' || e.key==='C') { controls.style.display = (controls.style.display==='none'||!controls.style.display) ? 'grid' : 'none'; }
-  if (e.key==='s' || e.key==='S') { changeSeasonBtn.click(); }
+  if (e.key==='c' || e.key==='C') { controls.style.display = (controls.style.display==='none'||!controls.style.display) ? 'grid' : 'none'; showUI(); }
+  if (e.key==='s' || e.key==='S') { document.getElementById('changeSeasonBtn').click(); }
   if (e.key==='h' || e.key==='H') { hotspotDebugBtn.click(); }
 });
 
