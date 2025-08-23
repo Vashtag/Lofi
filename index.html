@@ -857,14 +857,16 @@ function updateMuteButton(){ muteBtn.textContent = globalMuted ? '🔊 Unmute' :
 function toggleMute(){ globalMuted = !globalMuted; updateMuteButton(); saveSettings(); }
 
 /* ------- Fullscreen ------- */
-const fullscreenBtn = document.getElementById('fullscreenBtn');
-fullscreenBtn.addEventListener('click', ()=>{
-  if (document.fullscreenElement) document.exitFullscreen();
-  else document.documentElement.requestFullscreen().catch(()=>{});
-});
-window.addEventListener('keydown', e=>{
-  if (e.key==='f' || e.key==='F') fullscreenBtn.click();
-});
+// reuse the already-declared `fullscreenBtn`
+if (fullscreenBtn) {
+  fullscreenBtn.addEventListener('click', ()=>{
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(()=>{});
+  });
+  window.addEventListener('keydown', e=>{
+    if (e.key==='f' || e.key==='F') fullscreenBtn.click();
+  });
+}
 
 /* ------- Auto-hide UI after idle ------- */
 let uiIdleTimer=null, uiHover=false;
