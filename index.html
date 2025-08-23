@@ -146,22 +146,28 @@
     <div class="panel">
       <h2>Weather</h2>
       <div class="row wrap">
-        <span class="chip"><input id="rainOn" type="checkbox"><span class="lbl">Rain</span></span>
-        <span class="chip"><input id="snowOn" type="checkbox"><span class="lbl">Snow</span></span>
-        <span class="chip"><input id="windOn" type="checkbox" checked><span class="lbl">Wind</span></span>
-        <span class="chip"><input id="splashesOn" type="checkbox" checked><span class="lbl">Rain splashes</span></span>
-        <span class="chip"><input id="leavesOn" type="checkbox"><span class="lbl">Autumn leaves</span></span>
-        <span id="fireChip" class="chip" style="display:none;"><input id="fireOn" type="checkbox"><span class="lbl">Fireplace</span></span>
+        <span id="rainChip"     class="chip"><input id="rainOn" type="checkbox"><span class="lbl">Rain</span></span>
+        <span id="snowChip"     class="chip"><input id="snowOn" type="checkbox"><span class="lbl">Snow</span></span>
+        <span                   class="chip"><input id="windOn" type="checkbox" checked><span class="lbl">Wind</span></span>
+        <span id="splashesChip" class="chip"><input id="splashesOn" type="checkbox" checked><span class="lbl">Rain splashes</span></span>
+        <span id="leavesChip"   class="chip"><input id="leavesOn" type="checkbox"><span class="lbl">Autumn leaves</span></span>
+        <span id="fireChip"     class="chip" style="display:none;"><input id="fireOn" type="checkbox"><span class="lbl">Fireplace</span></span>
       </div>
       <div class="row">
-        <div class="slider-wrap"><label for="rainIntensity">Rain intensity</label>
-          <input id="rainIntensity" type="range" min="0" max="100" step="1" value="0"></div>
-        <div class="slider-wrap"><label for="snowIntensity">Snow intensity</label>
-          <input id="snowIntensity" type="range" min="0" max="100" step="1" value="0"></div>
-        <div class="slider-wrap"><label for="leavesIntensity">Leaves intensity</label>
-          <input id="leavesIntensity" type="range" min="0" max="100" step="1" value="40"></div>
+        <div id="rainWrap"   class="slider-wrap">
+          <label for="rainIntensity">Rain intensity</label>
+          <input id="rainIntensity" type="range" min="0" max="100" step="1" value="0">
+        </div>
+        <div id="snowWrap"   class="slider-wrap">
+          <label for="snowIntensity">Snow intensity</label>
+          <input id="snowIntensity" type="range" min="0" max="100" step="1" value="0">
+        </div>
+        <div id="leavesWrap" class="slider-wrap">
+          <label for="leavesIntensity">Leaves intensity</label>
+          <input id="leavesIntensity" type="range" min="0" max="100" step="1" value="40">
+        </div>
       </div>
-      <div class="row small">If splashes look too high/low, tweak each scene’s <code>floorY</code> (percent).</div>
+      <div class="row small">If rain splashes look off, tweak each scene’s <code>floorY</code> (% from top).</div>
     </div>
 
     <div class="panel">
@@ -220,6 +226,7 @@
    SCENES (replace URLs + hotspot boxes with your GitHub assets)
    floorY = where rain hits (percent from top)
    props: define lamps/windows as hotspots (percent boxes)
+   allow: rules for which weather options are available per season
    =========================================================== */
 const SCENES = {
   winter: {
@@ -229,10 +236,10 @@ const SCENES = {
     fireHotspot: { x: 68, y: 70, w: 14, h: 22 },
     fireSprite: { url: "sprites/fire_256x256_6x4.png", frameW:256, frameH:256, cols:6, rows:4, fps:18, scale:1.0, offsetX:0, offsetY:0 },
     floorY: 92,
-    // Example props (TODO: set real boxes or leave empty [])
+    allow: { rain: false, snow: true,  leaves: false },
     props: [
-      // { type:"lamp", id:"winterLamp", box:{x:52,y:48,w:6,h:10}, color:"rgba(255,210,140,0.9)", radius:320 },
-      // { type:"window", id:"winterWindow", box:{x:20,y:25,w:22,h:28} }
+      // { type:"lamp", id:"winterLamp",  box:{x:52,y:48,w:6,h:10}, color:"rgba(255,210,140,0.9)", radius:320 },
+      // { type:"window", id:"winterWin", box:{x:20,y:25,w:22,h:28} }
     ],
     defaults: {
       rainOn:false, snowOn:true,  windOn:true, splashesOn:true, fireOn:false,
@@ -248,9 +255,10 @@ const SCENES = {
     hasFireplace:false,
     fireHotspot:null, fireSprite:null,
     floorY: 90,
+    allow: { rain: true, snow: false, leaves: false },
     props: [
-      // { type:"lamp", id:"springLamp", box:{x:40,y:62,w:5,h:9}, color:"rgba(255,230,170,0.85)", radius:280 },
-      // { type:"window", id:"springWindow", box:{x:65,y:24,w:24,h:36} }
+      // { type:"lamp", id:"springLamp",  box:{x:40,y:62,w:5,h:9},  color:"rgba(255,230,170,0.85)", radius:280 },
+      // { type:"window", id:"springWin", box:{x:65,y:24,w:24,h:36} }
     ],
     defaults: {
       rainOn:true, snowOn:false, windOn:true, splashesOn:true, fireOn:false,
@@ -267,9 +275,10 @@ const SCENES = {
     fireHotspot:{ x:55, y:62, w:12, h:18 },
     fireSprite:{ url:"sprites/fire_256x256_6x4.png", frameW:256, frameH:256, cols:6, rows:4, fps:20, scale:1.0, offsetX:0, offsetY:0 },
     floorY: 91,
+    allow: { rain: false, snow: false, leaves: false },
     props: [
       // { type:"lamp", id:"summerLamp", box:{x:48,y:58,w:6,h:10}, color:"rgba(255,220,150,0.9)", radius:340 },
-      // { type:"window", id:"summerWindow", box:{x:16,y:22,w:20,h:30} }
+      // { type:"window", id:"summerWin", box:{x:16,y:22,w:20,h:30} }
     ],
     defaults: {
       rainOn:false, snowOn:false, windOn:true, splashesOn:true, fireOn:false,
@@ -286,9 +295,10 @@ const SCENES = {
     fireHotspot:{ x:64, y:68, w:16, h:20 },
     fireSprite:{ url:"sprites/fire_256x256_6x4.png", frameW:256, frameH:256, cols:6, rows:4, fps:18, scale:1.05, offsetX:0, offsetY:0 },
     floorY: 92,
+    allow: { rain: true, snow: false, leaves: true },
     props: [
-      // { type:"lamp", id:"fallLamp", box:{x:58,y:60,w:6,h:10}, color:"rgba(255,210,140,0.9)", radius:320 },
-      // { type:"window", id:"fallWindow", box:{x:22,y:26,w:20,h:32} }
+      // { type:"lamp", id:"fallLamp",  box:{x:58,y:60,w:6,h:10}, color:"rgba(255,210,140,0.9)", radius:320 },
+      // { type:"window", id:"fallWin",  box:{x:22,y:26,w:20,h:32} }
     ],
     defaults: {
       rainOn:true, snowOn:false, windOn:true, splashesOn:true, fireOn:false,
@@ -301,6 +311,8 @@ const SCENES = {
 };
 
 /* ===================== AUDIO ===================== */
+/* Supply your audio files in /audio (or change paths above).
+   I can’t upload to your repo—so you’ll add the files. */
 const AUDIO = {
   rain:  new Audio("audio/rain.mp3"),
   fire:  new Audio("audio/fire_crackle.mp3"),
@@ -374,7 +386,7 @@ class SplashSystem {
   }
 }
 
-/* ===================== RAIN (FIXED DOWNWARD MOTION) ===================== */
+/* ===================== RAIN (DOWNWARD) ===================== */
 class RainSystem {
   constructor(){ this.drops=[]; this.intensity=0; this.floorYpx=fx.height*0.92; this.enabled=false; this.splashes=new SplashSystem(); }
   setEnabled(on){ this.enabled = on; }
@@ -385,10 +397,9 @@ class RainSystem {
     const W=fx.width, H=fx.height;
     const x = Math.random()*(W + 100*DPR) - 50*DPR;
     const y = -Math.random()*H*0.15;
-    // Layer tuning (0 far, 1 mid, 2 near)
     const vy = [10, 14, 19][layer]*DPR + Math.random()*[5,6,7][layer]*DPR; // POSITIVE DOWN
     const slope = 0.25 + Math.random()*0.25; // horizontal per vertical
-    const vx = slope*vy;                     // base slant to the right; gust added in update
+    const vx = slope*vy;
     const w = [0.7, 1.0, 1.4][layer]*DPR;
     const alpha = [0.35,0.55,0.8][layer];
     this.drops.push({x,y,vx,vy,w,alpha,layer});
@@ -406,11 +417,10 @@ class RainSystem {
     this.ensureCount();
     const W=fx.width, H=fx.height;
     for (let d of this.drops){
-      d.x += d.vx + gust.val*(0.25 + d.layer*0.25); // wind push
+      d.x += d.vx + gust.val*(0.25 + d.layer*0.25);
       d.y += d.vy;
       if (d.y >= this.floorYpx){
         this.splashes.spawn(d.x, 0.7 + d.layer*0.3);
-        // recycle near top
         d.y = -Math.random()*H*0.2;
         d.x = Math.random()*(W + 100*DPR) - 50*DPR;
       }
@@ -430,7 +440,7 @@ class RainSystem {
         ctx.lineWidth = d.w;
         ctx.beginPath();
         ctx.moveTo(d.x, d.y);
-        ctx.lineTo(d.x - (d.vx + gust.val*0.2)*0.5, d.y - d.vy*0.5); // streak back along velocity
+        ctx.lineTo(d.x - (d.vx + gust.val*0.2)*0.5, d.y - d.vy*0.5);
         ctx.stroke();
       }
     }
@@ -541,7 +551,6 @@ class LeafSystem{
   }
 }
 const leafFX = new LeafSystem();
-// Load your leaf PNGs (transparent background). Update paths if needed:
 leafFX.load([
   "sprites/leaves/leaf1.png",
   "sprites/leaves/leaf2.png",
@@ -646,10 +655,12 @@ class WindowTrail {
   updateDraw(){
     if(!this.active || !this.ctx) return;
     const W=this.canvas.width, H=this.canvas.height, g=this.ctx;
-    // Fade slightly for motion blur
+    // Fade trails without darkening scene
+    g.globalCompositeOperation='destination-out';
+    g.fillStyle='rgba(0,0,0,0.08)';
+    g.fillRect(0,0,W,H);
+    // Draw fresh streaks
     g.globalCompositeOperation='source-over';
-    g.fillStyle='rgba(0,0,0,0.12)'; g.fillRect(0,0,W,H);
-    // Draw streams
     for (let s of this.streams){
       s.y += s.speed + Math.max(0, gust.val*0.15);
       if (s.y - s.len > H){ s.y = -Math.random()*H*0.1; s.x = Math.random()*W; }
@@ -672,6 +683,15 @@ const masterVol = $('#masterVol'), rainVol=$('#rainVol'), fireVol=$('#fireVol'),
 const brightness = $('#brightness'), warmth=$('#warmth'), vignette=$('#vignette'); const cycleOn = $('#cycleOn');
 const fireChip = $('#fireChip');
 
+const rainChipEl     = document.getElementById('rainChip');
+const snowChipEl     = document.getElementById('snowChip');
+const splashesChipEl = document.getElementById('splashesChip');
+const leavesChipEl   = document.getElementById('leavesChip');
+
+const rainWrapEl     = document.getElementById('rainWrap');
+const snowWrapEl     = document.getElementById('snowWrap');
+const leavesWrapEl   = document.getElementById('leavesWrap');
+
 let currentSeasonKey=null, currentCfg=null, fireplaceBounds=null, hotspotDebug=false;
 const STORE_KEY='ambience.settings.v3';
 
@@ -690,6 +710,39 @@ function saveSettings(){
 function loadSettings(){ try{ return JSON.parse(localStorage.getItem(STORE_KEY)); }catch{return null;} }
 function showLoader(flag){ loader.style.display = flag ? 'grid' : 'none'; }
 
+function show(el, on) { if (!el) return; el.style.display = on ? '' : 'none'; }
+
+function updateVisibilityForSeason() {
+  const allow = currentCfg?.allow || { rain:true, snow:true, leaves:(currentSeasonKey==='fall') };
+  // Rain + splashes
+  show(rainChipEl,     allow.rain);
+  show(rainWrapEl,     allow.rain);
+  show(splashesChipEl, allow.rain);
+  // Snow
+  show(snowChipEl, allow.snow);
+  show(snowWrapEl, allow.snow);
+  // Leaves (Fall only)
+  const leavesAllowed = !!(allow.leaves && currentSeasonKey==='fall');
+  show(leavesChipEl, leavesAllowed);
+  show(leavesWrapEl, leavesAllowed);
+}
+
+function enforceSeasonConstraints() {
+  const allow = currentCfg?.allow || {};
+  if (!allow.rain) {
+    rainOn.checked = false;
+    rainFX.setEnabled(false); rainFX.setIntensity(0); setTrackVolume('rain', 0);
+  }
+  if (!allow.snow) {
+    snowOn.checked = false;
+    snowFX.setEnabled(false); snowFX.setIntensity(0);
+  }
+  if (!(allow.leaves && currentSeasonKey==='fall')) {
+    leavesOn.checked = false;
+    leafFX.setEnabled(false); leafFX.setIntensity(0);
+  }
+}
+
 /* ------- Season load ------- */
 async function loadSeason(key){
   currentSeasonKey = key; currentCfg = SCENES[key]; showLoader(true);
@@ -697,7 +750,7 @@ async function loadSeason(key){
   await new Promise(res=>{ const img=new Image(); img.onload=res; img.onerror=res; img.src=currentCfg.image; });
   sceneEl.style.backgroundImage=`url('${currentCfg.image}')`;
   sceneEl.setAttribute('aria-label', `${currentCfg.name} ambience background`);
-  // hotspots reset
+  // reset
   hotspotsEl.innerHTML=''; fireplaceBounds=null; windowTrails.splice(0, windowTrails.length);
   overlaysEl.innerHTML='';
 
@@ -716,7 +769,6 @@ async function loadSeason(key){
   (currentCfg.props||[]).forEach(p=>{
     const hot = document.createElement('button'); hot.className='hotspot';
     hot.title = p.type==='lamp' ? 'Toggle lamp' : 'Toggle window rain trails';
-    hot.setAttribute('data-prop-id', p.id||'');
     hotspotsEl.appendChild(hot); positionHotspot(hot, p.box);
     if (hotspotDebug) hot.classList.add('debug');
     if (p.type==='lamp'){
@@ -726,10 +778,8 @@ async function loadSeason(key){
         if (on){ lamp = makeLampGlow(p.box, p.color||"rgba(255,210,140,0.9)", p.radius||320); }
         else { lamp?.el.remove(); lamp=null; }
       });
-      // keep resizing aligned
       window.addEventListener('resize', ()=>{ if(lamp) lamp.resize(); });
     } else if (p.type==='window'){
-      // window trails overlay
       const wt = new WindowTrail(p.box); let on=false;
       hot.addEventListener('click', ()=>{
         on=!on;
@@ -770,6 +820,12 @@ async function loadSeason(key){
   const floorPx = fx.height * (currentCfg.floorY/100);
   rainFX.setFloorY(floorPx); rainFX.setSplashes(splashesOn.checked);
   snowFX.setEnabled(snowOn.checked); rainFX.setEnabled(rainOn.checked);
+
+  // Show/hide controls per season + hard-block not-allowed effects
+  updateVisibilityForSeason();
+  enforceSeasonConstraints();
+
+  // Leaves only meaningful in Fall
   leafFX.setEnabled(leavesOn.checked && currentSeasonKey==='fall');
 
   applyWeather(); applyVolumes(); applyVisuals();
@@ -790,33 +846,50 @@ function placeFireSprite(){ if(!fireplaceBounds || !currentCfg?.fireSprite) retu
 
 /* ------- Weather/Audio/Visuals ------- */
 function applyWeather(){
-  rainFX.setEnabled(rainOn.checked); rainFX.setIntensity(+rainIntensity.value/100);
-  snowFX.setEnabled(snowOn.checked); snowFX.setIntensity(+snowIntensity.value/100);
-  rainFX.setSplashes(splashesOn.checked);
-  leafFX.setEnabled(leavesOn.checked && currentSeasonKey==='fall');
-  leafFX.setIntensity(+leavesIntensity.value/100);
+  const allow = currentCfg?.allow || { rain:true, snow:true, leaves:(currentSeasonKey==='fall') };
 
+  const rainAllowed   = !!allow.rain;
+  const snowAllowed   = !!allow.snow;
+  const leavesAllowed = !!(allow.leaves && currentSeasonKey==='fall');
+
+  // RAIN
+  const rainEnabled = rainAllowed && rainOn.checked;
+  rainFX.setEnabled(rainEnabled);
+  rainFX.setIntensity(rainEnabled ? (+rainIntensity.value/100) : 0);
+  rainFX.setSplashes(rainEnabled && splashesOn.checked);
+
+  // SNOW
+  const snowEnabled = snowAllowed && snowOn.checked;
+  snowFX.setEnabled(snowEnabled);
+  snowFX.setIntensity(snowEnabled ? (+snowIntensity.value/100) : 0);
+
+  // LEAVES
+  const leavesEnabled = leavesAllowed && leavesOn.checked;
+  leafFX.setEnabled(leavesEnabled);
+  leafFX.setIntensity(leavesEnabled ? (+leavesIntensity.value/100) : 0);
+
+  // Audio
   setTrackVolume('wind',  windOn.checked ? (+windVol.value/100) : 0);
-  setTrackVolume('rain',  (rainOn.checked ? (+rainVol.value/100) : 0) * Math.max(.25, +rainIntensity.value/100));
+  setTrackVolume('rain',  (rainEnabled ? (+rainVol.value/100) : 0) * Math.max(.25, +rainIntensity.value/100));
+
   saveSettings();
 }
 function applyVolumes(){
   masterVolume = +masterVol.value/100;
-  setTrackVolume('rain',  (rainOn.checked ? +rainVol.value/100 : 0) * Math.max(.25, +rainIntensity.value/100));
+  const allow = currentCfg?.allow || {};
+  const rainEnabled = !!allow.rain && rainOn.checked;
+  setTrackVolume('rain',  (rainEnabled ? +rainVol.value/100 : 0) * Math.max(.25, +rainIntensity.value/100));
   setTrackVolume('fire',  fireOn?.checked ? +fireVol.value/100 : 0);
   setTrackVolume('wind',  windOn.checked ? +windVol.value/100 : 0);
-  // Birds get 24h cycle modulation too (see updateDayNightCycle)
   setTrackVolume('birds', +birdsVol.value/100 * birdsCycleMultiplier);
   saveSettings();
 }
 let cycleTimer=null, birdsCycleMultiplier=1;
 function applyVisuals(){
-  // Base sliders
   const baseB = +brightness.value/100;
   const baseW = +warmth.value/100; // -0.5..0.5
   const baseV = +vignette.value/100;
 
-  // 24h cycle overlay
   const c = cycleOn.checked ? computeDayCycle() : { bMul:1, wAdd:0, vAdd:0, birdsMul:1 };
   birdsCycleMultiplier = c.birdsMul;
 
@@ -826,31 +899,27 @@ function applyVisuals(){
   sceneEl.style.filter = `brightness(${baseB * c.bMul}) saturate(${sat}) sepia(${sepia}) hue-rotate(${hue}deg)`;
   sceneEl.style.setProperty('--vignette', baseV + c.vAdd);
 
-  // apply birds cycle volume gently
   setTrackVolume('birds', +birdsVol.value/100 * birdsCycleMultiplier);
-
   saveSettings();
 }
 function computeDayCycle(){
   const now = new Date();
   const minutes = now.getHours()*60 + now.getMinutes();
   const t = minutes / 1440; // 0..1
-  // Daylight factor: 0 at midnight, 1 at noon (smooth cosine)
-  const day = 0.5 - 0.5 * Math.cos(2*Math.PI*t);
-  // Golden hour bumps around ~6am (0.25) and ~6pm (0.75)
+  const day = 0.5 - 0.5 * Math.cos(2*Math.PI*t); // 0 @ midnight, 1 @ noon
   const gauss = (x,mu,s)=> Math.exp(-((x-mu)*(x-mu))/(2*s*s));
   const golden = gauss(t,0.25,0.035) + gauss(t,0.75,0.035);
 
-  const bMul = 0.65 + 0.45*day;          // darker at night
+  const bMul = 0.65 + 0.45*day;            // darker at night
   const wAdd = 0.18*golden - 0.08*(1-day); // warm at golden hours, cooler at night
-  const vAdd = 0.08*(1-day);             // stronger vignette at night
-  const birdsMul = Math.max(0, Math.min(1, 0.15 + 0.9*day + 0.35*golden)); // birds louder by day, chirpy dawn/dusk
+  const vAdd = 0.08*(1-day);               // stronger vignette at night
+  const birdsMul = Math.max(0, Math.min(1, 0.15 + 0.9*day + 0.35*golden));
 
   return { bMul, wAdd, vAdd, birdsMul };
 }
 function startDayCycle(){
   if (cycleTimer) clearInterval(cycleTimer);
-  cycleTimer = setInterval(applyVisuals, 30*1000); // update every 30s
+  cycleTimer = setInterval(applyVisuals, 30*1000);
   applyVisuals();
 }
 
@@ -894,14 +963,15 @@ window.addEventListener('resize', ()=>{
     const hot=document.querySelector('.hotspot'); if(hot) positionHotspot(hot, currentCfg.fireHotspot);
     fireplaceBounds = pctBoxToPx(currentCfg.fireHotspot); placeFireSprite();
   }
-  // Resize props overlays
+  // Resize window overlays
   document.querySelectorAll('.window-overlay').forEach((_,i)=> windowTrails[i]?.resize());
   // Update floor for splashes after canvas resize
   if (currentCfg){ const floorPx = fx.height * (currentCfg.floorY/100); rainFX.setFloorY(floorPx); }
 });
 
+/* Show picker first & start day cycle */
 seasonPicker.style.display='grid'; controls.style.display='none';
-startDayCycle(); // start 24h cycle engine
+startDayCycle();
 </script>
 </body>
 </html>
