@@ -21,19 +21,28 @@
     --z-hotspots: 4;
     --z-ui: 5;
     --z-overlay: 6;
+    /* NEW: global zoom of the image stack (1 = fit; <1 = zoomed out) */
+    --bg-scale: 0.94;
   }
 
   *{ box-sizing: border-box; }
   html, body { height:100%; margin:0; background:#0b0e12; color:var(--ui-text);
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial; }
 
-  /* Scene (note: we will set multiple background images in JS when overlays are enabled) */
-  #scene { position:fixed; inset:0; z-index:var(--z-scene);
-    background:#0b0e12 center / cover no-repeat;
-    transition: filter .35s ease, transform .35s ease; will-change:filter,transform; }
+  /* Scene container (no background-image any more; we use real <img> layers) */
+  #scene { position:fixed; inset:0; z-index:var(--z-scene); transition: filter .35s ease, transform .35s ease; will-change:filter,transform; }
   #scene::after { content:""; position:absolute; inset:0; pointer-events:none;
     background: radial-gradient(ellipse at center, rgba(0,0,0,0) 40%, rgba(0,0,0,var(--vignette,.25)) 100%);
   }
+
+  /* NEW: stacked image layers */
+  #bgRoot { position:absolute; inset:0; overflow:hidden; }
+  #bgScale { position:absolute; inset:0; transform: scale(var(--bg-scale)); transform-origin:center center; }
+  .bg-img { position:absolute; inset:0; width:100%; height:100%; object-fit: contain;
+    user-select:none; pointer-events:none; image-rendering:auto; }
+  /* overlay images fade */
+  .bg-overlay { opacity:0; transition: opacity 120ms ease-in-out; }
+  .bg-overlay.on { opacity:1; }
 
   /* FX canvas (rain/snow/leaves) */
   #fx { position:fixed; inset:0; z-index:var(--z-canvas); pointer-events:none; }
@@ -43,11 +52,7 @@
   .lamp-glow { position:fixed; width:300px; height:300px; left:50%; top:50%;
     transform:translate(-50%,-50%); border-radius:50%; mix-blend-mode:screen; pointer-events:none;
     animation: lampFlicker 1.8s infinite steps(6, end); }
-  @keyframes lampFlicker {
-    0%   { filter:brightness(0.95); }
-    50%  { filter:brightness(1.05); }
-    100% { filter:brightness(0.95); }
-  }
+  @keyframes lampFlicker { 0%{filter:brightness(.95);} 50%{filter:brightness(1.05);} 100%{filter:brightness(.95);} }
   .window-overlay { position:fixed; pointer-events:none; }
 
   /* Fire sprite */
@@ -61,7 +66,7 @@
   .hotspot:focus-visible { outline:none; border-color:rgba(255,255,255,.7); }
   .hotspot.debug { border-color: rgba(255,255,255,.35); }
 
-  /* Season picker (first screen) */
+  /* Season picker */
   #season-picker { position:fixed; inset:0; z-index:var(--z-overlay);
     background:linear-gradient(180deg, rgba(6,8,10,.85), rgba(6,8,10,.85));
     display:grid; place-items:center; padding:clamp(20px,4vw,40px); }
@@ -118,8 +123,16 @@
 </head>
 <body>
 
-  <!-- Background image (and overlays via multiple backgrounds) -->
-  <div id="scene" role="img" aria-label="Ambience background"></div>
+  <!-- Scene behind everything -->
+  <div id="scene" role="img" aria-label="Ambience background">
+    <!-- NEW: real image layers -->
+    <div id="bgRoot">
+      <div id="bgScale">
+        <img id="baseImg" class="bg-img" alt="">
+        <!-- overlay images (e.g., picnic) will be appended here as <img class="bg-img bg-overlay"> -->
+      </div>
+    </div>
+  </div>
 
   <!-- Global particle canvas (rain/snow/leaves) -->
   <canvas id="fx"></canvas>
@@ -144,11 +157,11 @@
   <!-- Controls -->
   <div id="controls" style="display:none;">
 
-    <!-- NEW: Scene elements (per-season overlays like Picnic) -->
+    <!-- Scene elements (per-season overlays like Picnic) -->
     <div id="elementsPanel" class="panel" style="display:none;">
       <h2>Scene elements</h2>
       <div id="elementsList" class="row wrap"></div>
-      <div class="row small">These are visual overlays aligned to the base image (no manual positioning needed).</div>
+      <div class="row small">These are visual overlays aligned to the base image and fade in/out.</div>
     </div>
 
     <div class="panel">
@@ -202,7 +215,7 @@
     </div>
   </div>
 
-  <!-- Season picker (ALWAYS shown on load) -->
+  <!-- Season picker -->
   <div id="season-picker" aria-modal="true" role="dialog">
     <div class="picker-panel">
       <div class="picker-header">
@@ -231,11 +244,7 @@
 
 <script>
 /* ===========================================================
-   SCENES
-   - floorY: where rain hits (% from top)
-   - allow: seasonal weather rules
-   - props: clickable hotspots (lamps/windows)
-   - overlays: per-season visual overlays (full-canvas PNGs aligned to base)
+   SCENES (same as before, but overlays render as <img> layers)
    =========================================================== */
 const SCENES = {
   winter: {
@@ -246,13 +255,8 @@ const SCENES = {
     fireSprite: { url: "sprites/fire_256x256_6x4.png", frameW:256, frameH:256, cols:6, rows:4, fps:18, scale:1.0, offsetX:0, offsetY:0 },
     floorY: 92,
     allow: { rain: false, snow: true,  leaves: false },
-    props: [
-      // { type:"lamp", id:"winterLamp",  box:{x:52,y:48,w:6,h:10}, color:"rgba(255,210,140,0.9)", radius:320 },
-      // { type:"window", id:"winterWin", box:{x:20,y:25,w:22,h:28} }
-    ],
-    overlays: [
-      // add more winter overlays later if needed
-    ],
+    props: [ /* add if needed */ ],
+    overlays: [],
     defaults: {
       rainOn:false, snowOn:true,  windOn:true, splashesOn:true, fireOn:false,
       leavesOn:false, leavesIntensity:0.0,
@@ -268,10 +272,7 @@ const SCENES = {
     fireHotspot:null, fireSprite:null,
     floorY: 90,
     allow: { rain: true, snow: false, leaves: false },
-    props: [
-      // { type:"lamp", id:"springLamp",  box:{x:40,y:62,w:5,h:9},  color:"rgba(255,230,170,0.85)", radius:280 },
-      // { type:"window", id:"springWin", box:{x:65,y:24,w:24,h:36} }
-    ],
+    props: [ /* add if needed */ ],
     overlays: [],
     defaults: {
       rainOn:true, snowOn:false, windOn:true, splashesOn:true, fireOn:false,
@@ -289,10 +290,7 @@ const SCENES = {
     fireSprite:{ url:"sprites/fire_256x256_6x4.png", frameW:256, frameH:256, cols:6, rows:4, fps:20, scale:1.0, offsetX:0, offsetY:0 },
     floorY: 91,
     allow: { rain: false, snow: false, leaves: false },
-    props: [
-      // { type:"lamp", id:"summerLamp", box:{x:48,y:58,w:6,h:10}, color:"rgba(255,220,150,0.9)", radius:340 },
-      // { type:"window", id:"summerWin", box:{x:16,y:22,w:20,h:30} }
-    ],
+    props: [ /* add if needed */ ],
     overlays: [
       { key:"picnic", label:"Picnic", url:"assets/summer_picnic.png", default:false }
     ],
@@ -312,10 +310,7 @@ const SCENES = {
     fireSprite:{ url:"sprites/fire_256x256_6x4.png", frameW:256, frameH:256, cols:6, rows:4, fps:18, scale:1.05, offsetX:0, offsetY:0 },
     floorY: 92,
     allow: { rain: true, snow: false, leaves: true },
-    props: [
-      // { type:"lamp", id:"fallLamp",  box:{x:58,y:60,w:6,h:10}, color:"rgba(255,210,140,0.9)", radius:320 },
-      // { type:"window", id:"fallWin",  box:{x:22,y:26,w:20,h:32} }
-    ],
+    props: [ /* add if needed */ ],
     overlays: [],
     defaults: {
       rainOn:true, snowOn:false, windOn:true, splashesOn:true, fireOn:false,
@@ -327,7 +322,7 @@ const SCENES = {
   }
 };
 
-/* ===================== AUDIO (you provide files) ===================== */
+/* ===================== AUDIO ===================== */
 const AUDIO = {
   rain:  new Audio("audio/rain.mp3"),
   fire:  new Audio("audio/fire_crackle.mp3"),
@@ -336,11 +331,8 @@ const AUDIO = {
 };
 for (const a of Object.values(AUDIO)) { a.loop = true; a.preload = "auto"; a.volume = 0; }
 let masterVolume = 0.8, globalMuted = false, audioUnlocked = false;
-function unlockAudio(){
-  if (audioUnlocked) return; audioUnlocked = true;
-  Object.values(AUDIO).forEach(a=>{
-    try { a.play().then(()=>{ a.pause(); a.currentTime = 0; }).catch(()=>{});} catch {}
-  });
+function unlockAudio(){ if (audioUnlocked) return; audioUnlocked = true;
+  Object.values(AUDIO).forEach(a=>{ try { a.play().then(()=>{ a.pause(); a.currentTime = 0; }).catch(()=>{});} catch {} });
 }
 function setTrackVolume(track, v){
   const a = AUDIO[track]; if(!a) return;
@@ -348,234 +340,128 @@ function setTrackVolume(track, v){
   a.volume = vol; if (vol>0 && a.paused) { a.play().catch(()=>{}); }
 }
 
-/* ===================== CANVAS ===================== */
+/* ===================== CANVAS, WIND, RAIN/SNOW/LEAVES ===================== */
 const fx = document.getElementById('fx');
 const ctx = fx.getContext('2d');
 let DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
 function resizeCanvas(){ DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-  fx.width = Math.floor(window.innerWidth*DPR);
-  fx.height = Math.floor(window.innerHeight*DPR);
+  fx.width = Math.floor(window.innerWidth*DPR); fx.height = Math.floor(window.innerHeight*DPR);
 }
 window.addEventListener('resize', resizeCanvas, { passive:true }); resizeCanvas();
 const clamp01 = v => Math.max(0, Math.min(1, v));
 
-/* ===================== WIND GUST (visual) ===================== */
 const gust = { t: 0, val: 0 };
 function updateGust(windOn) {
-  gust.t += 0.003;
-  const base = windOn ? 0.9 : 0.25;
+  gust.t += 0.003; const base = windOn ? 0.9 : 0.25;
   const wave = Math.sin(gust.t*3.2)*0.4 + Math.sin(gust.t*1.3+1.2)*0.25;
   gust.val = (base + wave) * DPR;
 }
 
-/* ===================== SPLASHES (rain impact) ===================== */
+/* Splashes */
 class SplashSystem {
   constructor(){ this.jets=[]; this.ripples=[]; this.enabled=true; this.floorYpx = fx.height*0.92; }
-  setEnabled(on){ this.enabled = on; }
-  setFloorY(yPx){ this.floorYpx = yPx; }
-  spawn(x, strength=1){
-    if (!this.enabled) return;
-    const n = 3 + Math.floor(Math.random()*3);
-    for (let i=0;i<n;i++){
-      const a = (Math.random()*Math.PI/3) + Math.PI/3; // spray up ~60°
-      const speed = (3 + Math.random()*3) * strength * DPR;
-      const vx = Math.cos(a) * speed * (Math.random()<0.5 ? -1 : 1) * 0.55;
-      const vy = -Math.abs(Math.sin(a) * speed * 1.15);
-      this.jets.push({ x, y:this.floorYpx-1, vx, vy, life: 1, decay: 0.06 + Math.random()*0.04 });
+  setEnabled(on){ this.enabled = on; } setFloorY(yPx){ this.floorYpx = yPx; }
+  spawn(x, strength=1){ if (!this.enabled) return;
+    const n=3+Math.floor(Math.random()*3);
+    for (let i=0;i<n;i++){ const a=(Math.random()*Math.PI/3)+Math.PI/3;
+      const speed=(3+Math.random()*3)*strength*DPR;
+      const vx=Math.cos(a)*speed*(Math.random()<0.5?-1:1)*0.55;
+      const vy=-Math.abs(Math.sin(a)*speed*1.15);
+      this.jets.push({ x, y:this.floorYpx-1, vx, vy, life:1, decay:0.06+Math.random()*0.04 });
     }
-    const rMax = (6 + Math.random()*10) * DPR * (0.6 + strength*0.8);
-    this.ripples.push({ x, y:this.floorYpx, r:2, rMax, alpha:0.35, fade:0.015 + Math.random()*0.01, width:1.2*DPR });
+    const rMax=(6+Math.random()*10)*DPR*(0.6+strength*0.8);
+    this.ripples.push({ x, y:this.floorYpx, r:2, rMax, alpha:0.35, fade:0.015+Math.random()*0.01, width:1.2*DPR });
   }
-  update(){
-    for (let j of this.jets){ j.vy += 0.25*DPR; j.x += j.vx + gust.val*0.15; j.y += j.vy; j.life -= j.decay; }
-    this.jets = this.jets.filter(j => j.life>0 && j.y < this.floorYpx+4*DPR);
-    for (let r of this.ripples){ r.r += 0.9*DPR; r.alpha -= r.fade; }
-    this.ripples = this.ripples.filter(r => r.alpha>0 && r.r<r.rMax);
+  update(){ for (let j of this.jets){ j.vy+=0.25*DPR; j.x+=j.vx+gust.val*0.15; j.y+=j.vy; j.life-=j.decay; }
+    this.jets=this.jets.filter(j=>j.life>0 && j.y<this.floorYpx+4*DPR);
+    for (let r of this.ripples){ r.r+=0.9*DPR; r.alpha-=r.fade; }
+    this.ripples=this.ripples.filter(r=>r.alpha>0 && r.r<r.rMax);
   }
-  draw(){
-    if (this.jets.length){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=0.7; ctx.fillStyle='rgba(190,210,255,.65)';
+  draw(){ if (this.jets.length){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=0.7; ctx.fillStyle='rgba(190,210,255,.65)';
       for (let j of this.jets){ ctx.beginPath(); ctx.arc(j.x,j.y,1.2*DPR,0,Math.PI*2); ctx.fill(); } ctx.restore(); }
     if (this.ripples.length){ ctx.save(); ctx.strokeStyle='rgba(200,220,255,0.5)';
-      for (let r of this.ripples){ ctx.globalAlpha=r.alpha; ctx.lineWidth=r.width;
-        ctx.beginPath(); ctx.arc(r.x,r.y,r.r,0,Math.PI*2); ctx.stroke(); } ctx.restore(); }
-  }
+      for (let r of this.ripples){ ctx.globalAlpha=r.alpha; ctx.lineWidth=r.width; ctx.beginPath(); ctx.arc(r.x,r.y,r.r,0,Math.PI*2); ctx.stroke(); } ctx.restore(); } }
 }
 
-/* ===================== RAIN ===================== */
+/* Rain */
 class RainSystem {
   constructor(){ this.drops=[]; this.intensity=0; this.floorYpx=fx.height*0.92; this.enabled=false; this.splashes=new SplashSystem(); }
-  setEnabled(on){ this.enabled = on; }
-  setSplashes(on){ this.splashes.setEnabled(on); }
+  setEnabled(on){ this.enabled=on; } setSplashes(on){ this.splashes.setEnabled(on); }
   setFloorY(yPx){ this.floorYpx=yPx; this.splashes.setFloorY(yPx); }
-  setIntensity(f){ this.intensity = clamp01(f); }
-  spawnOne(layer=1){
+  setIntensity(f){ this.intensity=clamp01(f); }
+  spawnOne(layer=1){ const W=fx.width, H=fx.height;
+    const x=Math.random()*(W+100*DPR)-50*DPR; const y=-Math.random()*H*0.15;
+    const vy=[10,14,19][layer]*DPR + Math.random()*[5,6,7][layer]*DPR;
+    const slope=0.25+Math.random()*0.25; const vx=slope*vy;
+    const w=[0.7,1.0,1.4][layer]*DPR; const alpha=[0.35,0.55,0.8][layer];
+    this.drops.push({x,y,vx,vy,w,alpha,layer}); }
+  ensureCount(){ const target=Math.floor(this.intensity*900);
+    while(this.drops.length<target){ const r=Math.random(); const layer=r<0.2?2:(r<0.75?1:0); this.spawnOne(layer); }
+    if(this.drops.length>target) this.drops.length=target; }
+  update(){ if(!this.enabled || this.intensity<=0) return; this.ensureCount();
     const W=fx.width, H=fx.height;
-    const x = Math.random()*(W + 100*DPR) - 50*DPR;
-    const y = -Math.random()*H*0.15;
-    const vy = [10, 14, 19][layer]*DPR + Math.random()*[5,6,7][layer]*DPR;
-    const slope = 0.25 + Math.random()*0.25;
-    const vx = slope*vy;
-    const w = [0.7, 1.0, 1.4][layer]*DPR;
-    const alpha = [0.35,0.55,0.8][layer];
-    this.drops.push({x,y,vx,vy,w,alpha,layer});
-  }
-  ensureCount(){
-    const target = Math.floor(this.intensity * 900);
-    while (this.drops.length < target){
-      const r = Math.random(); const layer = r<0.2?2:(r<0.75?1:0);
-      this.spawnOne(layer);
-    }
-    if (this.drops.length > target) this.drops.length = target;
-  }
-  update(){
-    if (!this.enabled || this.intensity<=0) return;
-    this.ensureCount();
-    const W=fx.width, H=fx.height;
-    for (let d of this.drops){
-      d.x += d.vx + gust.val*(0.25 + d.layer*0.25);
-      d.y += d.vy;
-      if (d.y >= this.floorYpx){
-        this.splashes.spawn(d.x, 0.7 + d.layer*0.3);
-        d.y = -Math.random()*H*0.2;
-        d.x = Math.random()*(W + 100*DPR) - 50*DPR;
-      }
-      if (d.x < -60*DPR) d.x = W + 60*DPR;
-      if (d.x > W + 60*DPR) d.x = -60*DPR;
-    }
-    this.splashes.update();
-  }
-  draw(){
-    if (!this.enabled || this.intensity<=0) return;
+    for(let d of this.drops){ d.x+=d.vx+gust.val*(0.25+d.layer*0.25); d.y+=d.vy;
+      if(d.y>=this.floorYpx){ this.splashes.spawn(d.x,0.7+d.layer*0.3); d.y=-Math.random()*H*0.2; d.x=Math.random()*(W+100*DPR)-50*DPR; }
+      if(d.x<-60*DPR) d.x=W+60*DPR; if(d.x>W+60*DPR) d.x=-60*DPR; }
+    this.splashes.update(); }
+  draw(){ if(!this.enabled || this.intensity<=0) return;
     ctx.save(); ctx.lineCap='round';
-    for (let pass=0; pass<3; pass++){
-      for (let d of this.drops){
-        if (d.layer!==pass) continue;
-        ctx.globalAlpha = d.alpha;
-        ctx.strokeStyle = '#bcd7ff';
-        ctx.lineWidth = d.w;
-        ctx.beginPath();
-        ctx.moveTo(d.x, d.y);
-        ctx.lineTo(d.x - (d.vx + gust.val*0.2)*0.5, d.y - d.vy*0.5);
-        ctx.stroke();
-      }
-    }
-    ctx.restore();
-    this.splashes.draw();
-  }
+    for(let pass=0; pass<3; pass++){ for(let d of this.drops){ if(d.layer!==pass) continue;
+      ctx.globalAlpha=d.alpha; ctx.strokeStyle='#bcd7ff'; ctx.lineWidth=d.w; ctx.beginPath();
+      ctx.moveTo(d.x,d.y); ctx.lineTo(d.x-(d.vx+gust.val*0.2)*0.5, d.y-d.vy*0.5); ctx.stroke(); } }
+    ctx.restore(); this.splashes.draw(); }
 }
 
-/* ===================== SNOW ===================== */
-function makeFlakeSprite(r){
-  const c=document.createElement('canvas'); c.width=c.height=Math.ceil(r*2+2);
+/* Snow */
+function makeFlakeSprite(r){ const c=document.createElement('canvas'); c.width=c.height=Math.ceil(r*2+2);
   const g=c.getContext('2d'); const cx=c.width/2, cy=c.height/2;
   const grd=g.createRadialGradient(cx,cy,0,cx,cy,r);
   grd.addColorStop(0,'rgba(255,255,255,.95)'); grd.addColorStop(0.6,'rgba(255,255,255,.55)'); grd.addColorStop(1,'rgba(255,255,255,0)');
-  g.fillStyle=grd; g.beginPath(); g.arc(cx,cy,r,0,Math.PI*2); g.fill(); return c;
-}
+  g.fillStyle=grd; g.beginPath(); g.arc(cx,cy,r,0,Math.PI*2); g.fill(); return c; }
 const SNOW_SPRITES=[makeFlakeSprite(1.2*DPR),makeFlakeSprite(1.8*DPR),makeFlakeSprite(2.4*DPR)];
 class SnowSystem{
   constructor(){ this.flakes=[]; this.intensity=0; this.enabled=false; }
-  setEnabled(on){ this.enabled=on; }
-  setIntensity(f){ this.intensity=clamp01(f); }
-  ensureCount(){ const target=Math.floor(this.intensity*420);
-    while(this.flakes.length<target) this.spawn();
-    if(this.flakes.length>target) this.flakes.length=target; }
-  spawn(){
-    const W=fx.width, H=fx.height; const z=Math.random();
-    const spriteIdx=(z<0.33?0:(z<0.66?1:2));
-    const vx=(Math.random()*0.3 - 0.15)*DPR;
-    const vy=(0.4 + Math.random()*0.6) * (0.6 + z*0.8)*DPR;
-    this.flakes.push({ x:Math.random()*W, y:-Math.random()*H*0.2, vx, vy,
-      swing:(0.4 + Math.random()*1.6)*DPR, t:Math.random()*Math.PI*2, tw:0.008+Math.random()*0.02,
-      z, s:SNOW_SPRITES[spriteIdx], alpha:0.6 + (1-z)*0.35 });
-  }
-  update(){ if(!this.enabled || this.intensity<=0) return;
-    this.ensureCount(); const W=fx.width, H=fx.height;
-    for (let f of this.flakes){
-      f.t += f.tw; const sway=Math.sin(f.t)*f.swing;
-      f.x += f.vx + sway*0.02 + gust.val*0.12*(0.5+f.z);
-      f.y += f.vy; if (f.y>H){ f.y=-10*DPR; f.x=Math.random()*W; }
-      if (f.x<-50*DPR) f.x=W+50*DPR; if (f.x>W+50*DPR) f.x=-50*DPR;
-    }
-  }
-  draw(){ if(!this.enabled || this.intensity<=0) return;
-    ctx.save(); for (let f of this.flakes){ ctx.globalAlpha=f.alpha; ctx.drawImage(f.s,f.x-f.s.width/2,f.y-f.s.height/2); } ctx.restore();
-  }
+  setEnabled(on){ this.enabled=on; } setIntensity(f){ this.intensity=clamp01(f); }
+  ensureCount(){ const target=Math.floor(this.intensity*420); while(this.flakes.length<target) this.spawn(); if(this.flakes.length>target) this.flakes.length=target; }
+  spawn(){ const W=fx.width,H=fx.height; const z=Math.random(); const idx=(z<0.33?0:(z<0.66?1:2));
+    const vx=(Math.random()*0.3-0.15)*DPR; const vy=(0.4+Math.random()*0.6)*(0.6+z*0.8)*DPR;
+    this.flakes.push({ x:Math.random()*W, y:-Math.random()*H*0.2, vx, vy, swing:(0.4+Math.random()*1.6)*DPR, t:Math.random()*Math.PI*2, tw:0.008+Math.random()*0.02,
+      z, s:SNOW_SPRITES[idx], alpha:0.6+(1-z)*0.35 }); }
+  update(){ if(!this.enabled||this.intensity<=0) return; this.ensureCount(); const W=fx.width,H=fx.height;
+    for(let f of this.flakes){ f.t+=f.tw; const sway=Math.sin(f.t)*f.swing; f.x+=f.vx+sway*0.02+gust.val*0.12*(0.5+f.z); f.y+=f.vy;
+      if(f.y>H){ f.y=-10*DPR; f.x=Math.random()*W; } if(f.x<-50*DPR) f.x=W+50*DPR; if(f.x>W+50*DPR) f.x=-50*DPR; } }
+  draw(){ if(!this.enabled||this.intensity<=0) return; ctx.save(); for(let f of this.flakes){ ctx.globalAlpha=f.alpha; ctx.drawImage(f.s,f.x-f.s.width/2,f.y-f.s.height/2); } ctx.restore(); }
 }
 
-/* ===================== LEAVES (AUTUMN) ===================== */
+/* Leaves (autumn) */
 class LeafSystem{
-  constructor(){
-    this.enabled=false; this.intensity=0; this.leaves=[];
-    this.sprites=[]; this.ready=false; this.fallbackColors=['#c55c18','#d79a2e','#9a5a1a','#bf6f24'];
-  }
-  async load(urls){
-    const loads = urls.map(u => new Promise(res=>{
-      const img=new Image(); img.onload=()=>res(img); img.onerror=()=>res(null); img.src=u;
-    }));
-    const imgs = await Promise.all(loads);
-    this.sprites = imgs.filter(Boolean);
-    this.ready = this.sprites.length>0;
-  }
-  setEnabled(on){ this.enabled=on; }
-  setIntensity(f){ this.intensity=clamp01(f); }
-  ensureCount(){ const target=Math.floor(this.intensity*180);
-    while(this.leaves.length<target) this.spawn();
-    if(this.leaves.length>target) this.leaves.length=target; }
-  spawn(){
-    const W=fx.width, H=fx.height;
-    const scale=0.6 + Math.random()*0.9;
-    const vx = (Math.random()*0.6 + 0.3)*DPR; // drift right
-    const vy = (0.8 + Math.random()*1.4)*DPR;
-    const rot = Math.random()*Math.PI*2, rotSpd=(Math.random()*0.02 - 0.01);
-    const sprite = this.ready ? this.sprites[Math.floor(Math.random()*this.sprites.length)] : null;
-    const color = this.fallbackColors[Math.floor(Math.random()*this.fallbackColors.length)];
-    this.leaves.push({ x: -20*DPR + Math.random()*W, y:-Math.random()*H*0.3, vx, vy, rot, rotSpd, scale, sprite, color });
-  }
-  update(){
-    if(!this.enabled || this.intensity<=0) return;
-    this.ensureCount();
-    const W=fx.width, H=fx.height;
-    for (let L of this.leaves){
-      L.x += L.vx + gust.val*0.35; L.y += L.vy*(0.6 + 0.4*Math.sin(L.rot*2));
-      L.rot += L.rotSpd + 0.006*Math.sin(L.x*0.01);
-      if (L.y>H+30*DPR){ L.y=-20*DPR; L.x=Math.random()*W; }
-      if (L.x>W+30*DPR) L.x=-30*DPR;
-    }
-  }
-  draw(){
-    if(!this.enabled || this.intensity<=0) return;
-    ctx.save();
-    for (let L of this.leaves){
-      ctx.translate(L.x, L.y); ctx.rotate(L.rot); ctx.scale(L.scale, L.scale);
-      if (L.sprite){
-        const w=L.sprite.width, h=L.sprite.height; ctx.globalAlpha=0.9;
-        ctx.drawImage(L.sprite, -w/2, -h/2);
-      } else {
-        ctx.fillStyle=L.color; ctx.globalAlpha=0.85;
-        ctx.beginPath(); ctx.moveTo(0,-8*DPR); ctx.quadraticCurveTo(10*DPR,0,0,8*DPR);
-        ctx.quadraticCurveTo(-10*DPR,0,0,-8*DPR); ctx.fill();
-        ctx.strokeStyle='rgba(0,0,0,.15)'; ctx.lineWidth=0.8*DPR; ctx.stroke();
-      }
-      ctx.setTransform(1,0,0,1,0,0);
-    }
-    ctx.restore();
-  }
+  constructor(){ this.enabled=false; this.intensity=0; this.leaves=[]; this.sprites=[]; this.ready=false; this.fallbackColors=['#c55c18','#d79a2e','#9a5a1a','#bf6f24']; }
+  async load(urls){ const loads=urls.map(u=>new Promise(res=>{ const img=new Image(); img.onload=()=>res(img); img.onerror=()=>res(null); img.src=u; }));
+    const imgs=await Promise.all(loads); this.sprites=imgs.filter(Boolean); this.ready=this.sprites.length>0; }
+  setEnabled(on){ this.enabled=on; } setIntensity(f){ this.intensity=clamp01(f); }
+  ensureCount(){ const target=Math.floor(this.intensity*180); while(this.leaves.length<target) this.spawn(); if(this.leaves.length>target) this.leaves.length=target; }
+  spawn(){ const W=fx.width,H=fx.height; const scale=0.6+Math.random()*0.9; const vx=(Math.random()*0.6+0.3)*DPR; const vy=(0.8+Math.random()*1.4)*DPR;
+    const rot=Math.random()*Math.PI*2, rotSpd=(Math.random()*0.02 - 0.01);
+    const sprite=this.ready?this.sprites[Math.floor(Math.random()*this.sprites.length)]:null;
+    const color=this.fallbackColors[Math.floor(Math.random()*this.fallbackColors.length)];
+    this.leaves.push({ x:-20*DPR+Math.random()*W, y:-Math.random()*H*0.3, vx, vy, rot, rotSpd, scale, sprite, color }); }
+  update(){ if(!this.enabled||this.intensity<=0) return; this.ensureCount(); const W=fx.width,H=fx.height;
+    for(let L of this.leaves){ L.x+=L.vx+gust.val*0.35; L.y+=L.vy*(0.6+0.4*Math.sin(L.rot*2)); L.rot+=L.rotSpd+0.006*Math.sin(L.x*0.01);
+      if(L.y>H+30*DPR){ L.y=-20*DPR; L.x=Math.random()*W; } if(L.x>W+30*DPR) L.x=-30*DPR; } }
+  draw(){ if(!this.enabled||this.intensity<=0) return; ctx.save();
+    for(let L of this.leaves){ ctx.translate(L.x,L.y); ctx.rotate(L.rot); ctx.scale(L.scale,L.scale);
+      if(L.sprite){ const w=L.sprite.width,h=L.sprite.height; ctx.globalAlpha=0.9; ctx.drawImage(L.sprite, -w/2, -h/2); }
+      else { ctx.fillStyle=L.color; ctx.globalAlpha=0.85; ctx.beginPath(); ctx.moveTo(0,-8*DPR); ctx.quadraticCurveTo(10*DPR,0,0,8*DPR); ctx.quadraticCurveTo(-10*DPR,0,0,-8*DPR); ctx.fill(); ctx.strokeStyle='rgba(0,0,0,.15)'; ctx.lineWidth=0.8*DPR; ctx.stroke(); }
+      ctx.setTransform(1,0,0,1,0,0); }
+    ctx.restore(); }
 }
 const leafFX = new LeafSystem();
-leafFX.load([
-  "sprites/leaves/leaf1.png",
-  "sprites/leaves/leaf2.png",
-  "sprites/leaves/leaf3.png"
-]).catch(()=>{});
+leafFX.load(["sprites/leaves/leaf1.png","sprites/leaves/leaf2.png","sprites/leaves/leaf3.png"]).catch(()=>{});
 
-/* ===================== RENDER LOOP ===================== */
-const rainFX = new RainSystem();
-const snowFX = new SnowSystem();
+/* Render loop */
+const rainFX = new RainSystem(); const snowFX = new SnowSystem();
 let running=true;
-function loop(){
-  if(!running) return;
-  ctx.clearRect(0,0,fx.width,fx.height);
+function loop(){ if(!running) return; ctx.clearRect(0,0,fx.width,fx.height);
   updateGust(document.getElementById('windOn').checked);
   rainFX.update(); snowFX.update(); leafFX.update();
   rainFX.draw();   snowFX.draw();   leafFX.draw();
@@ -585,101 +471,53 @@ function loop(){
 requestAnimationFrame(loop);
 
 /* ===================== FIRE SPRITE ===================== */
-class FireSprite{
-  constructor(el){ this.el=el; this.cfg=null; this.frame=0; this.timer=null; this.total=0; }
-  load(cfg){ this.cfg=cfg; this.frame=0; this.total=cfg.cols*cfg.rows;
-    this.el.style.backgroundImage=`url('${cfg.url}')`;
-    this.el.style.width=cfg.frameW+'px'; this.el.style.height=cfg.frameH+'px';
-    this.el.style.backgroundSize=`${cfg.cols*100}% ${cfg.rows*100}%`; }
-  place(px,py,scale=1){ this.el.style.left=px+'px'; this.el.style.top=py+'px';
-    this.el.style.transform=`translate(-50%,-50%) scale(${scale})`; }
-  start(){
-    if(!this.cfg) return; this.el.style.display='block';
-    const step=()=>{ this.frame=(this.frame+1)%this.total;
-      const c=this.frame%this.cfg.cols, r=Math.floor(this.frame/this.cfg.cols);
-      const posX=(c/(this.cfg.cols-1))*100, posY=(r/(this.cfg.rows-1))*100;
-      this.el.style.backgroundPosition=`${posX}% ${posY}%`; this.timer=setTimeout(step, 1000/this.cfg.fps); };
-    step();
-  }
-  stop(){ this.el.style.display='none'; if(this.timer){ clearTimeout(this.timer); this.timer=null; } }
-}
+class FireSprite{ constructor(el){ this.el=el; this.cfg=null; this.frame=0; this.timer=null; this.total=0; }
+  load(cfg){ this.cfg=cfg; this.frame=0; this.total=cfg.cols*cfg.rows; this.el.style.backgroundImage=`url('${cfg.url}')`;
+    this.el.style.width=cfg.frameW+'px'; this.el.style.height=cfg.frameH+'px'; this.el.style.backgroundSize=`${cfg.cols*100}% ${cfg.rows*100}%`; }
+  place(px,py,scale=1){ this.el.style.left=px+'px'; this.el.style.top=py+'px'; this.el.style.transform=`translate(-50%,-50%) scale(${scale})`; }
+  start(){ if(!this.cfg) return; this.el.style.display='block';
+    const step=()=>{ this.frame=(this.frame+1)%this.total; const c=this.frame%this.cfg.cols, r=Math.floor(this.frame/this.cfg.cols);
+      const posX=(c/(this.cfg.cols-1))*100, posY=(r/(this.cfg.rows-1))*100; this.el.style.backgroundPosition=`${posX}% ${posY}%`;
+      this.timer=setTimeout(step, 1000/this.cfg.fps); }; step(); }
+  stop(){ this.el.style.display='none'; if(this.timer){ clearTimeout(this.timer); this.timer=null; } } }
 const fireSprite = new FireSprite(document.getElementById('fire-sprite'));
 
 /* ===================== PROPS (LAMP / WINDOW) ===================== */
-const overlaysEl = document.getElementById('overlays');
-const windowTrails = []; // active window overlays
-
-function pctBoxToPx(box){ const vw=window.innerWidth, vh=window.innerHeight;
-  return { left:vw*(box.x/100), top:vh*(box.y/100), width:vw*(box.w/100), height:vh*(box.h/100) };
-}
+const overlaysEl = document.getElementById('overlays'); const windowTrails = [];
+function pctBoxToPx(box){ const vw=window.innerWidth, vh=window.innerHeight; return { left:vw*(box.x/100), top:vh*(box.y/100), width:vw*(box.w/100), height:vh*(box.h/100) }; }
 function makeLampGlow(box, color="rgba(255,210,140,0.9)", radius=320){
-  const px = pctBoxToPx(box);
-  const d = document.createElement('div');
-  d.className = 'lamp-glow';
-  const cx = px.left + px.width/2, cy = px.top + px.height/2;
-  d.style.left = cx + 'px'; d.style.top = cy + 'px';
+  const px = pctBoxToPx(box); const d = document.createElement('div'); d.className = 'lamp-glow';
+  const cx = px.left + px.width/2, cy = px.top + px.height/2; d.style.left = cx + 'px'; d.style.top = cy + 'px';
   d.style.width = radius + 'px'; d.style.height = radius + 'px';
   d.style.background = `radial-gradient(circle, ${color} 0%, rgba(255,200,120,0.6) 35%, rgba(255,160,80,0.18) 65%, rgba(255,120,60,0.05) 100%)`;
   overlaysEl.appendChild(d);
   return { el: d, resize(){ const px=pctBoxToPx(box); const cx=px.left+px.width/2, cy=px.top+px.height/2; d.style.left=cx+'px'; d.style.top=cy+'px'; } };
 }
-class WindowTrail {
-  constructor(boxPct){ this.boxPct=boxPct; this.canvas=null; this.ctx=null; this.streams=[]; this.active=false; }
-  attach(){
-    const px=pctBoxToPx(this.boxPct);
-    const c=document.createElement('canvas'); c.className='window-overlay';
-    c.style.left=px.left+'px'; c.style.top=px.top+'px';
-    c.width=Math.max(1, Math.floor(px.width*DPR)); c.height=Math.max(1, Math.floor(px.height*DPR));
-    c.style.width=px.width+'px'; c.style.height=px.height+'px';
-    overlaysEl.appendChild(c); this.canvas=c; this.ctx=c.getContext('2d'); this.active=true;
-    this.buildStreams();
-  }
+class WindowTrail { constructor(boxPct){ this.boxPct=boxPct; this.canvas=null; this.ctx=null; this.streams=[]; this.active=false; }
+  attach(){ const px=pctBoxToPx(this.boxPct); const c=document.createElement('canvas'); c.className='window-overlay';
+    c.style.left=px.left+'px'; c.style.top=px.top+'px'; c.width=Math.max(1, Math.floor(px.width*DPR)); c.height=Math.max(1, Math.floor(px.height*DPR));
+    c.style.width=px.width+'px'; c.style.height=px.height+'px'; overlaysEl.appendChild(c); this.canvas=c; this.ctx=c.getContext('2d'); this.active=true; this.buildStreams(); }
   detach(){ if(this.canvas){ this.canvas.remove(); this.canvas=null; this.ctx=null; } this.active=false; }
-  resize(){
-    if(!this.canvas) return;
-    const px=pctBoxToPx(this.boxPct);
+  resize(){ if(!this.canvas) return; const px=pctBoxToPx(this.boxPct);
     this.canvas.style.left=px.left+'px'; this.canvas.style.top=px.top+'px';
-    this.canvas.width=Math.max(1, Math.floor(px.width*DPR));
-    this.canvas.height=Math.max(1, Math.floor(px.height*DPR));
-    this.canvas.style.width=px.width+'px'; this.canvas.style.height=px.height+'px';
-    this.buildStreams();
-  }
-  buildStreams(){
-    if(!this.ctx) return; this.streams=[];
-    const W=this.canvas.width, H=this.canvas.height;
-    const count = Math.max(4, Math.floor(W/70));
-    for (let i=0;i<count;i++){
-      this.streams.push({
-        x: Math.random()*W, y: Math.random()*H*0.2,
-        speed: (0.6 + Math.random()*1.2)*DPR,
-        len: (H*0.25) + Math.random()*H*0.35,
-        w: (0.8 + Math.random()*1.4)*DPR,
-        alpha: 0.25 + Math.random()*0.25
-      });
-    }
-  }
-  updateDraw(){
-    if(!this.active || !this.ctx) return;
-    const W=this.canvas.width, H=this.canvas.height, g=this.ctx;
-    g.globalCompositeOperation='destination-out';
-    g.fillStyle='rgba(0,0,0,0.08)'; g.fillRect(0,0,W,H);
+    this.canvas.width=Math.max(1, Math.floor(px.width*DPR)); this.canvas.height=Math.max(1, Math.floor(px.height*DPR));
+    this.canvas.style.width=px.width+'px'; this.canvas.style.height=px.height+'px'; this.buildStreams(); }
+  buildStreams(){ if(!this.ctx) return; this.streams=[]; const W=this.canvas.width,H=this.canvas.height;
+    const count=Math.max(4, Math.floor(W/70)); for(let i=0;i<count;i++){ this.streams.push({ x:Math.random()*W, y:Math.random()*H*0.2, speed:(0.6+Math.random()*1.2)*DPR,
+      len:(H*0.25)+Math.random()*H*0.35, w:(0.8+Math.random()*1.4)*DPR, alpha:0.25+Math.random()*0.25 }); } }
+  updateDraw(){ if(!this.active||!this.ctx) return; const W=this.canvas.width,H=this.canvas.height,g=this.ctx;
+    g.globalCompositeOperation='destination-out'; g.fillStyle='rgba(0,0,0,0.08)'; g.fillRect(0,0,W,H);
     g.globalCompositeOperation='source-over';
-    for (let s of this.streams){
-      s.y += s.speed + Math.max(0, gust.val*0.15);
-      if (s.y - s.len > H){ s.y = -Math.random()*H*0.1; s.x = Math.random()*W; }
-      const grad = g.createLinearGradient(s.x, s.y-s.len, s.x, s.y);
-      grad.addColorStop(0, `rgba(200,220,255,0)`); grad.addColorStop(1, `rgba(200,220,255,${s.alpha})`);
-      g.strokeStyle=grad; g.lineWidth=s.w; g.beginPath(); g.moveTo(s.x, s.y-s.len); g.lineTo(s.x, s.y); g.stroke();
-    }
-  }
-}
+    for(let s of this.streams){ s.y+=s.speed+Math.max(0, gust.val*0.15); if(s.y-s.len>H){ s.y=-Math.random()*H*0.1; s.x=Math.random()*W; }
+      const grad=g.createLinearGradient(s.x, s.y-s.len, s.x, s.y); grad.addColorStop(0,'rgba(200,220,255,0)'); grad.addColorStop(1,`rgba(200,220,255,${s.alpha})`);
+      g.strokeStyle=grad; g.lineWidth=s.w; g.beginPath(); g.moveTo(s.x, s.y-s.len); g.lineTo(s.x, s.y); g.stroke(); } } }
 
 /* ===================== UI & STATE ===================== */
 const $ = s => document.querySelector(s);
-const sceneEl = $('#scene'), hotspotsEl = $('#hotspots'), seasonPicker = $('#season-picker'), loader = $('#loader'), controls = $('#controls');
+const sceneEl = $('#scene'), bgScaleEl = $('#bgScale'), baseImg = $('#baseImg');
+const hotspotsEl = $('#hotspots'), seasonPicker = $('#season-picker'), loader = $('#loader'), controls = $('#controls');
 const changeSeasonBtn = $('#changeSeasonBtn'), toggleControlsBtn = $('#toggleControlsBtn'), muteBtn = $('#muteBtn'), hotspotDebugBtn = $('#hotspotDebugBtn');
-const elementsPanel = document.getElementById('elementsPanel');
-const elementsList = document.getElementById('elementsList');
+const elementsPanel = $('#elementsPanel'), elementsList = $('#elementsList');
 
 const rainOn = $('#rainOn'), snowOn=$('#snowOn'), windOn=$('#windOn'), splashesOn=$('#splashesOn'), fireOn=$('#fireOn'), leavesOn=$('#leavesOn');
 const rainIntensity = $('#rainIntensity'), snowIntensity=$('#snowIntensity'), leavesIntensity=$('#leavesIntensity');
@@ -687,24 +525,18 @@ const masterVol = $('#masterVol'), rainVol=$('#rainVol'), fireVol=$('#fireVol'),
 const brightness = $('#brightness'), warmth=$('#warmth'), vignette=$('#vignette'); const cycleOn = $('#cycleOn');
 const fireChip = $('#fireChip');
 
-const rainChipEl     = document.getElementById('rainChip');
-const snowChipEl     = document.getElementById('snowChip');
-const splashesChipEl = document.getElementById('splashesChip');
-const leavesChipEl   = document.getElementById('leavesChip');
-const rainWrapEl     = document.getElementById('rainWrap');
-const snowWrapEl     = document.getElementById('snowWrap');
-const leavesWrapEl   = document.getElementById('leavesWrap');
+const rainChipEl = $('#rainChip'), snowChipEl = $('#snowChip'), splashesChipEl = $('#splashesChip'), leavesChipEl = $('#leavesChip');
+const rainWrapEl = $('#rainWrap'), snowWrapEl = $('#snowWrap'), leavesWrapEl = $('#leavesWrap');
 
 let currentSeasonKey=null, currentCfg=null, fireplaceBounds=null, hotspotDebug=false;
-let overlayState = {}; // { key: boolean }
+let overlayState = {};          // {key:boolean}
+let overlayImgs  = {};          // {key: HTMLImageElement}
 const STORE_KEY='ambience.settings.v3';
 
 function saveSettings(){
   try{
-    // capture overlay states
     const overlays = {};
     elementsList.querySelectorAll('input[data-overlay]').forEach(inp => overlays[inp.dataset.overlay] = !!inp.checked);
-
     localStorage.setItem(STORE_KEY, JSON.stringify({
       season: currentSeasonKey,
       rainOn: rainOn.checked, snowOn: snowOn.checked, windOn: windOn.checked, splashesOn: splashesOn.checked, fireOn: fireOn?.checked, leavesOn: leavesOn.checked,
@@ -719,81 +551,79 @@ function loadSettings(){ try{ return JSON.parse(localStorage.getItem(STORE_KEY))
 function showLoader(flag){ loader.style.display = flag ? 'grid' : 'none'; }
 function show(el, on) { if (!el) return; el.style.display = on ? '' : 'none'; }
 
-/* ------- Overlays (Picnic etc.) ------- */
+/* ------- Overlays (Picnic) as real <img> with fade ------- */
+function clearOverlayImages(){ Object.values(overlayImgs).forEach(img => img.remove()); overlayImgs = {}; }
+function ensureOverlayImage(def){
+  if (overlayImgs[def.key]) return overlayImgs[def.key];
+  const img = new Image(); img.className = 'bg-img bg-overlay'; img.alt = def.label || def.key; img.src = def.url;
+  bgScaleEl.appendChild(img); overlayImgs[def.key] = img; return img;
+}
+function syncOverlayImages(){
+  const defs = currentCfg.overlays || [];
+  // ensure desired visibilities
+  defs.forEach(def=>{
+    const want = !!overlayState[def.key];
+    const img = ensureOverlayImage(def);
+    // quick fade via class toggle; image loads asynchronously but opacity anim still applies when it flips to "on"
+    if (want) img.classList.add('on'); else img.classList.remove('on');
+  });
+  // hide controls panel if none
+  elementsPanel.style.display = defs.length ? '' : 'none';
+}
 function buildOverlayControls(){
   elementsList.innerHTML = '';
+  clearOverlayImages();
   const defs = currentCfg.overlays || [];
-  if (!defs.length){ elementsPanel.style.display='none'; overlayState = {}; updateSceneBackground(); return; }
-  // start with defaults
+  if (!defs.length){ overlayState = {}; elementsPanel.style.display='none'; return; }
   overlayState = Object.fromEntries(defs.map(d => [d.key, !!d.default]));
-  // merge any saved state for this season
-  const saved = loadSettings();
-  if (saved && saved.season === currentSeasonKey && saved.overlays){
-    for (const k in saved.overlays) if (k in overlayState) overlayState[k] = !!saved.overlays[k];
-  }
-
+  const saved = loadSettings(); if (saved && saved.season===currentSeasonKey && saved.overlays){ for (const k in saved.overlays) if (k in overlayState) overlayState[k]=!!saved.overlays[k]; }
   defs.forEach(d=>{
-    const span = document.createElement('span'); span.className='chip';
-    const id = `overlay-${d.key}`;
-    span.innerHTML = `<input type="checkbox" id="${id}" data-overlay="${d.key}" ${overlayState[d.key] ? 'checked':''}><span class="lbl">${d.label}</span>`;
+    const span = document.createElement('span'); span.className='chip'; const id=`overlay-${d.key}`;
+    span.innerHTML = `<input type="checkbox" id="${id}" data-overlay="${d.key}" ${overlayState[d.key]?'checked':''}><span class="lbl">${d.label}</span>`;
     elementsList.appendChild(span);
   });
   elementsPanel.style.display='';
-
-  // wire events
+  // wire
   elementsList.querySelectorAll('input[data-overlay]').forEach(inp=>{
-    inp.addEventListener('change', ()=>{ overlayState[inp.dataset.overlay] = inp.checked; updateSceneBackground(); saveSettings(); });
+    inp.addEventListener('change', ()=>{ overlayState[inp.dataset.overlay] = inp.checked; syncOverlayImages(); saveSettings(); });
   });
-
-  updateSceneBackground();
-}
-function updateSceneBackground(){
-  // Build background-image with overlays first (topmost) then base
-  const defs = currentCfg.overlays || [];
-  const urls = [];
-  defs.forEach(d=> { if (overlayState[d.key]) urls.push(`url('${d.url}')`); });
-  urls.push(`url('${currentCfg.image}')`);
-  sceneEl.style.backgroundImage = urls.join(', ');
-  // background-size/position already set to "cover/center" in CSS — applies to all layers
+  // apply
+  syncOverlayImages();
 }
 
-/* ------- Season-visibility rules for weather ------- */
+/* ------- Weather controls visibility ------- */
 function updateVisibilityForSeason() {
   const allow = currentCfg?.allow || { rain:true, snow:true, leaves:(currentSeasonKey==='fall') };
-  show(rainChipEl,     allow.rain);
-  show(rainWrapEl,     allow.rain);
-  show(splashesChipEl, allow.rain);
-  show(snowChipEl, allow.snow);
-  show(snowWrapEl, allow.snow);
-  const leavesAllowed = !!(allow.leaves && currentSeasonKey==='fall');
-  show(leavesChipEl, leavesAllowed);
-  show(leavesWrapEl, leavesAllowed);
+  show(rainChipEl,     allow.rain); show(rainWrapEl, allow.rain); show(splashesChipEl, allow.rain);
+  show(snowChipEl, allow.snow); show(snowWrapEl, allow.snow);
+  const leavesAllowed = !!(allow.leaves && currentSeasonKey==='fall'); show(leavesChipEl, leavesAllowed); show(leavesWrapEl, leavesAllowed);
 }
 function enforceSeasonConstraints() {
   const allow = currentCfg?.allow || {};
-  if (!allow.rain) { rainOn.checked = false; rainFX.setEnabled(false); rainFX.setIntensity(0); setTrackVolume('rain', 0); }
-  if (!allow.snow) { snowOn.checked = false; snowFX.setEnabled(false); snowFX.setIntensity(0); }
-  if (!(allow.leaves && currentSeasonKey==='fall')) { leavesOn.checked = false; leafFX.setEnabled(false); leafFX.setIntensity(0); }
+  if (!allow.rain) { rainOn.checked=false; rainFX.setEnabled(false); rainFX.setIntensity(0); setTrackVolume('rain',0); }
+  if (!allow.snow) { snowOn.checked=false; snowFX.setEnabled(false); snowFX.setIntensity(0); }
+  if (!(allow.leaves && currentSeasonKey==='fall')) { leavesOn.checked=false; leafFX.setEnabled(false); leafFX.setIntensity(0); }
 }
 
 /* ------- Season load ------- */
 async function loadSeason(key){
   currentSeasonKey = key; currentCfg = SCENES[key]; showLoader(true);
-  // preload base
-  await new Promise(res=>{ const img=new Image(); img.onload=res; img.onerror=res; img.src=currentCfg.image; });
+  // preload base, then set it
+  await new Promise(res=>{ const i=new Image(); i.onload=res; i.onerror=res; i.src=currentCfg.image; });
+  baseImg.src = currentCfg.image;
   sceneEl.setAttribute('aria-label', `${currentCfg.name} ambience background`);
-  // reset overlays (lamps/windows canvases)
+
+  // reset overlays (canvases)
   overlaysEl.innerHTML=''; windowTrails.splice(0, windowTrails.length);
 
-  // Build overlay chips (e.g., Picnic for Summer) and apply background layers
+  // build overlay chips (e.g., Picnic) and actual <img> layers
   buildOverlayControls();
 
-  // Hotspots reset
+  // hotspots reset
   hotspotsEl.innerHTML=''; fireplaceBounds=null;
   if(currentCfg.hasFireplace && currentCfg.fireHotspot){
-    const hot = document.createElement('button'); hot.className='hotspot'; hot.title='Toggle fireplace'; hot.setAttribute('aria-label','Toggle fireplace');
-    hotspotsEl.appendChild(hot); positionHotspot(hot, currentCfg.fireHotspot);
-    hot.addEventListener('click', ()=> toggleFire());
+    const hot=document.createElement('button'); hot.className='hotspot'; hot.title='Toggle fireplace'; hot.setAttribute('aria-label','Toggle fireplace');
+    hotspotsEl.appendChild(hot); positionHotspot(hot, currentCfg.fireHotspot); hot.addEventListener('click', ()=> toggleFire());
     if (hotspotDebug) hot.classList.add('debug');
     fireplaceBounds = pctBoxToPx(currentCfg.fireHotspot);
     if (currentCfg.fireSprite) fireSprite.load(currentCfg.fireSprite); placeFireSprite();
@@ -802,25 +632,15 @@ async function loadSeason(key){
 
   // Props hotspots (lamps/windows)
   (currentCfg.props||[]).forEach(p=>{
-    const hot = document.createElement('button'); hot.className='hotspot';
+    const hot=document.createElement('button'); hot.className='hotspot';
     hot.title = p.type==='lamp' ? 'Toggle lamp' : 'Toggle window rain trails';
     hotspotsEl.appendChild(hot); positionHotspot(hot, p.box);
     if (hotspotDebug) hot.classList.add('debug');
-    if (p.type==='lamp'){
-      let lamp=null; let on=false;
-      hot.addEventListener('click', ()=>{
-        on = !on;
-        if (on){ lamp = makeLampGlow(p.box, p.color||"rgba(255,210,140,0.9)", p.radius||320); }
-        else { lamp?.el.remove(); lamp=null; }
-      });
+    if (p.type==='lamp'){ let lamp=null; let on=false;
+      hot.addEventListener('click', ()=>{ on=!on; if(on){ lamp=makeLampGlow(p.box, p.color||"rgba(255,210,140,0.9)", p.radius||320); } else { lamp?.el.remove(); lamp=null; } });
       window.addEventListener('resize', ()=>{ if(lamp) lamp.resize(); });
-    } else if (p.type==='window'){
-      const wt = new WindowTrail(p.box); let on=false;
-      hot.addEventListener('click', ()=>{
-        on=!on;
-        if(on){ wt.attach(); windowTrails.push(wt); }
-        else { wt.detach(); const i=windowTrails.indexOf(wt); if(i>-1) windowTrails.splice(i,1); }
-      });
+    } else if (p.type==='window'){ const wt=new WindowTrail(p.box); let on=false;
+      hot.addEventListener('click', ()=>{ on=!on; if(on){ wt.attach(); windowTrails.push(wt); } else { wt.detach(); const i=windowTrails.indexOf(wt); if(i>-1) windowTrails.splice(i,1); } });
       window.addEventListener('resize', ()=>{ wt.resize(); });
     }
   });
@@ -856,11 +676,9 @@ async function loadSeason(key){
   rainFX.setFloorY(floorPx); rainFX.setSplashes(splashesOn.checked);
   snowFX.setEnabled(snowOn.checked); rainFX.setEnabled(rainOn.checked);
 
-  // Show/hide weather controls per season + hard-block not-allowed effects
-  updateVisibilityForSeason();
-  enforceSeasonConstraints();
+  updateVisibilityForSeason(); enforceSeasonConstraints();
 
-  // Leaves only meaningful in Fall
+  // Leaves only in Fall
   leafFX.setEnabled(leavesOn.checked && currentSeasonKey==='fall');
 
   applyWeather(); applyVolumes(); applyVisuals();
@@ -882,34 +700,27 @@ function placeFireSprite(){ if(!fireplaceBounds || !currentCfg?.fireSprite) retu
 /* ------- Weather/Audio/Visuals ------- */
 function applyWeather(){
   const allow = currentCfg?.allow || { rain:true, snow:true, leaves:(currentSeasonKey==='fall') };
+  const rainAllowed=!!allow.rain, snowAllowed=!!allow.snow, leavesAllowed=!!(allow.leaves && currentSeasonKey==='fall');
 
-  const rainAllowed   = !!allow.rain;
-  const snowAllowed   = !!allow.snow;
-  const leavesAllowed = !!(allow.leaves && currentSeasonKey==='fall');
-
-  const rainEnabled = rainAllowed && rainOn.checked;
-  rainFX.setEnabled(rainEnabled);
+  const rainEnabled = rainAllowed && rainOn.checked; rainFX.setEnabled(rainEnabled);
   rainFX.setIntensity(rainEnabled ? (+rainIntensity.value/100) : 0);
   rainFX.setSplashes(rainEnabled && splashesOn.checked);
 
-  const snowEnabled = snowAllowed && snowOn.checked;
-  snowFX.setEnabled(snowEnabled);
+  const snowEnabled = snowAllowed && snowOn.checked; snowFX.setEnabled(snowEnabled);
   snowFX.setIntensity(snowEnabled ? (+snowIntensity.value/100) : 0);
 
-  const leavesEnabled = leavesAllowed && leavesOn.checked;
-  leafFX.setEnabled(leavesEnabled);
+  const leavesEnabled=leavesAllowed && leavesOn.checked; leafFX.setEnabled(leavesEnabled);
   leafFX.setIntensity(leavesEnabled ? (+leavesIntensity.value/100) : 0);
 
-  setTrackVolume('wind',  windOn.checked ? (+windVol.value/100) : 0);
-  setTrackVolume('rain',  (rainEnabled ? (+rainVol.value/100) : 0) * Math.max(.25, +rainIntensity.value/100));
-
+  setTrackVolume('wind', windOn.checked ? (+windVol.value/100) : 0);
+  setTrackVolume('rain', (rainEnabled ? (+rainVol.value/100) : 0) * Math.max(.25, +rainIntensity.value/100));
   saveSettings();
 }
 function applyVolumes(){
   masterVolume = +masterVol.value/100;
   const allow = currentCfg?.allow || {};
   const rainEnabled = !!allow.rain && rainOn.checked;
-  setTrackVolume('rain',  (rainEnabled ? +rainVol.value/100 : 0) * Math.max(.25, +rainIntensity.value/100));
+  setTrackVolume('rain', (rainEnabled ? +rainVol.value/100 : 0) * Math.max(.25, +rainIntensity.value/100));
   setTrackVolume('fire',  fireOn?.checked ? +fireVol.value/100 : 0);
   setTrackVolume('wind',  windOn.checked ? +windVol.value/100 : 0);
   setTrackVolume('birds', +birdsVol.value/100 * birdsCycleMultiplier);
@@ -917,42 +728,24 @@ function applyVolumes(){
 }
 let cycleTimer=null, birdsCycleMultiplier=1;
 function applyVisuals(){
-  const baseB = +brightness.value/100;
-  const baseW = +warmth.value/100; // -0.5..0.5
-  const baseV = +vignette.value/100;
-
-  const c = cycleOn.checked ? computeDayCycle() : { bMul:1, wAdd:0, vAdd:0, birdsMul:1 };
-  birdsCycleMultiplier = c.birdsMul;
-
-  const sepia = Math.max(0, (baseW + c.wAdd))*0.6;
-  const hue = ((baseW + c.wAdd)<0 ? -6 : 6) * Math.abs(baseW + c.wAdd);
-  const sat = 1 + Math.abs(baseW + c.wAdd)*0.25;
-  sceneEl.style.filter = `brightness(${baseB * c.bMul}) saturate(${sat}) sepia(${sepia}) hue-rotate(${hue}deg)`;
+  const baseB=+brightness.value/100, baseW=+warmth.value/100, baseV=+vignette.value/100;
+  const c = cycleOn.checked ? computeDayCycle() : { bMul:1, wAdd:0, vAdd:0, birdsMul:1 }; birdsCycleMultiplier=c.birdsMul;
+  const sepia=Math.max(0,(baseW+c.wAdd))*0.6; const hue=((baseW+c.wAdd)<0?-6:6)*Math.abs(baseW+c.wAdd); const sat=1+Math.abs(baseW+c.wAdd)*0.25;
+  sceneEl.style.filter = `brightness(${baseB*c.bMul}) saturate(${sat}) sepia(${sepia}) hue-rotate(${hue}deg)`;
   sceneEl.style.setProperty('--vignette', baseV + c.vAdd);
-
   setTrackVolume('birds', +birdsVol.value/100 * birdsCycleMultiplier);
   saveSettings();
 }
 function computeDayCycle(){
-  const now = new Date();
-  const minutes = now.getHours()*60 + now.getMinutes();
-  const t = minutes / 1440;
-  const day = 0.5 - 0.5 * Math.cos(2*Math.PI*t);
-  const gauss = (x,mu,s)=> Math.exp(-((x-mu)*(x-mu))/(2*s*s));
+  const now=new Date(); const minutes=now.getHours()*60+now.getMinutes(); const t=minutes/1440;
+  const day=0.5-0.5*Math.cos(2*Math.PI*t);
+  const gauss=(x,mu,s)=>Math.exp(-((x-mu)*(x-mu))/(2*s*s));
   const golden = gauss(t,0.25,0.035) + gauss(t,0.75,0.035);
-
-  const bMul = 0.65 + 0.45*day;
-  const wAdd = 0.18*golden - 0.08*(1-day);
-  const vAdd = 0.08*(1-day);
-  const birdsMul = Math.max(0, Math.min(1, 0.15 + 0.9*day + 0.35*golden));
-
+  const bMul=0.65+0.45*day, wAdd=0.18*golden-0.08*(1-day), vAdd=0.08*(1-day);
+  const birdsMul=Math.max(0, Math.min(1, 0.15 + 0.9*day + 0.35*golden));
   return { bMul, wAdd, vAdd, birdsMul };
 }
-function startDayCycle(){
-  if (cycleTimer) clearInterval(cycleTimer);
-  cycleTimer = setInterval(applyVisuals, 30*1000);
-  applyVisuals();
-}
+function startDayCycle(){ if (cycleTimer) clearInterval(cycleTimer); cycleTimer=setInterval(applyVisuals, 30*1000); applyVisuals(); }
 
 /* ------- Fireplace ------- */
 function lightFire(){ if(!currentCfg || !currentCfg.hasFireplace) return;
