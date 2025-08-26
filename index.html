@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
 <title>Seasons Ambience</title>
-<meta name="description" content="Interactive ambience — seasons, weather, blossoms, leaves, god rays, heat haze, puddles, snow buildup, fireflies."/>
+<meta name="description" content="Interactive ambience — seasons, weather, blossoms, leaves, god rays, heat haze, snow buildup, fireflies."/>
 <style>
   :root{
     --ui-bg: rgba(20,22,24,.55);
@@ -621,7 +621,7 @@ class PetalSystem{
   }
 }
 
-/* ======= NEW: Snow buildup (winter), puddle accumulation (rain) ======= */
+/* ======= Snow buildup (winter) ======= */
 class SnowBuildup{
   constructor(){ this.level=0; this.floorYpx=fx.height*0.95; }
   setFloorY(px){ this.floorYpx=px; }
@@ -653,49 +653,13 @@ class SnowBuildup{
     ctx.restore();
   }
 }
-class Puddles{
-  constructor(){ this.level=0; this.floorYpx=fx.height*0.95; this.t=0; }
-  setFloorY(px){ this.floorYpx=px; }
-  update(dt, enabled, intensity){
-    const up = 0.45*(0.15 + 0.85*intensity); const down=0.35;
-    this.level += (enabled ? up : -down) * dt;
-    this.level = clamp01(this.level);
-    this.t += dt;
-  }
-  draw(){
-    if(this.level<=0.01) return;
-    const W=fx.width,H=fx.height; const bandBase=H*0.05, bandExtra=H*0.14*this.level;
-    const top = Math.max(0, this.floorYpx - (bandBase + bandExtra));
-    ctx.save();
-    // Darken / saturate ground
-    ctx.globalCompositeOperation='multiply';
-    const dark=ctx.createLinearGradient(0, top, 0, H);
-    dark.addColorStop(0, `rgba(0,0,0,0)`);
-    dark.addColorStop(0.6, `rgba(10,12,14,${0.20*this.level})`);
-    dark.addColorStop(1, `rgba(10,12,14,${0.35*this.level})`);
-    ctx.fillStyle=dark; ctx.fillRect(0, top, W, H-top);
-    // Moving wet sheen (specular-ish)
-    ctx.globalCompositeOperation='screen';
-    ctx.globalAlpha = 0.08*this.level;
-    const stripes = 3;
-    for(let i=0;i<stripes;i++){
-      const y = top + (i+0.5)/stripes * (H-top) + Math.sin(this.t*0.6 + i)*8*DPR;
-      const grad = ctx.createLinearGradient(0, y-8*DPR, 0, y+8*DPR);
-      grad.addColorStop(0, 'rgba(255,255,255,0)');
-      grad.addColorStop(0.5, 'rgba(255,255,255,0.9)');
-      grad.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle=grad; ctx.fillRect(0, y-10*DPR, W, 20*DPR);
-    }
-    ctx.restore();
-  }
-}
 
-/* ======= NEW: Fireflies (summer only) ======= */
+/* ======= Fireflies (summer only) ======= */
 function makeGlowSprite(r){
   const c=document.createElement('canvas'); c.width=c.height=Math.ceil(r*2+2);
   const g=c.getContext('2d'); const cx=c.width/2, cy=c.height/2;
   const grad=g.createRadialGradient(cx,cy,0, cx,cy,r);
-  grad.addColorStop(0, 'rgba(255,255,180,1)');    // bright core
+  grad.addColorStop(0, 'rgba(255,255,180,1)');
   grad.addColorStop(0.45, 'rgba(220,255,160,0.55)');
   grad.addColorStop(1, 'rgba(180,220,140,0)');
   g.fillStyle=grad; g.beginPath(); g.arc(cx,cy,r,0,Math.PI*2); g.fill();
@@ -704,14 +668,13 @@ function makeGlowSprite(r){
 const FIREFLY_SPRITES=[makeGlowSprite(2.2*DPR), makeGlowSprite(3.0*DPR), makeGlowSprite(4.0*DPR)];
 class FirefliesSystem{
   constructor(){
-    this.enabled=false; this.intensity=0.6; // <<< tweak default intensity here (0..1)
+    this.enabled=false; this.intensity=0.6; // tweak default strength here (0..1)
     this.bugs=[]; this.t=0;
   }
   setEnabled(on){ this.enabled=on; if(!on) this.bugs.length=0; }
   setIntensity(f){ this.intensity=clamp01(f); }
   ensureCount(){
-    // Target count scales with intensity and viewport
-    const base = Math.round((fx.width/DPR) * (fx.height/DPR) / 40000); // ~1 per 200x200
+    const base = Math.round((fx.width/DPR) * (fx.height/DPR) / 40000);
     const target = Math.max(6, Math.floor(base * (8*this.intensity)));
     while(this.bugs.length<target) this.spawn();
     if(this.bugs.length>target) this.bugs.length=target;
@@ -719,11 +682,11 @@ class FirefliesSystem{
   spawn(){
     const W=fx.width,H=fx.height;
     const x=Math.random()*W;
-    const y=H*(0.45 + Math.random()*0.45); // lower-mid area feels natural
-    const s = 0.8 + Math.random()*1.6;     // scale factor for sprite
+    const y=H*(0.45 + Math.random()*0.45);
+    const s = 0.8 + Math.random()*1.6;
     const vx=(Math.random()*0.18 - 0.09)*DPR;
     const vy=(Math.random()*0.10 - 0.05)*DPR;
-    const tw=0.4 + Math.random()*0.8;      // flicker speed multiplier
+    const tw=0.4 + Math.random()*0.8;
     const phase=Math.random()*Math.PI*2;
     const spr=FIREFLY_SPRITES[Math.floor(Math.random()*FIREFLY_SPRITES.length)];
     this.bugs.push({x,y,spr,s, vx,vy, tw, phase});
@@ -735,10 +698,8 @@ class FirefliesSystem{
     for(const b of this.bugs){
       const sin = Math.sin((this.t+b.phase)*b.tw);
       const cos = Math.cos((this.t*0.8+b.phase*0.7)*b.tw);
-      // gentle drift + slight up-buoyancy + wind influence
       b.x += b.vx + sin*0.12*DPR + (gust.on?gust.val*0.05:0);
       b.y += b.vy - 0.01*DPR + cos*0.06*DPR;
-      // wrap around edges
       if(b.x<-40*DPR) b.x=W+40*DPR; if(b.x>W+40*DPR) b.x=-40*DPR;
       if(b.y< H*0.28) b.y=H*0.85; if(b.y>H*0.95) b.y=H*0.55;
     }
@@ -749,7 +710,6 @@ class FirefliesSystem{
     ctx.globalCompositeOperation='screen';
     for(const b of this.bugs){
       const t = this.t + b.phase;
-      // flicker between 0.35–1 with a soft pulse
       const flicker = 0.35 + 0.65 * (0.5+0.5*Math.sin(t*1.6)) * (0.7 + 0.3*Math.sin(t*0.9+0.7));
       ctx.globalAlpha = 0.22 * this.intensity * flicker;
       const w=b.spr.width, h=b.spr.height;
@@ -764,7 +724,7 @@ const fireflies = new FirefliesSystem();
 /* --------- RENDER LOOP --------- */
 const rainFX = new RainSystem(); const snowFX = new SnowSystem();
 const leafFX = new LeafSystem(); const petalFX = new PetalSystem();
-const snowAccum = new SnowBuildup(); const puddles = new Puddles();
+const snowAccum = new SnowBuildup();
 let enableCaustics=false, raysIntensity=0.8, currentWaterMask=null;
 const baseMeta={ w:0, h:0 };
 let lastTS=0;
@@ -781,16 +741,12 @@ function loop(ts){
   // Wind
   updateGust(document.getElementById('windOn').checked);
 
-  // Wetness
+  // Flags for snow buildup + thunder scheduling
   const rainAllowed = currentCfg?.allow?.rain;
   const snowAllowed = currentCfg?.allow?.snow;
   const rainEnabled = !!(rainAllowed && document.getElementById('rainOn').checked && (+document.getElementById('rainIntensity').value>0));
   const snowEnabled = !!(snowAllowed && document.getElementById('snowOn').checked && (+document.getElementById('snowIntensity').value>0));
-  const rainI = +document.getElementById('rainIntensity').value/100;
   const snowI = +document.getElementById('snowIntensity').value/100;
-
-  puddles.update(dt, rainEnabled, rainI);
-  puddles.draw();
 
   // Snow buildup (winter only) before flakes so flakes land over it
   if (currentSeasonKey==='winter') { snowAccum.update(dt, snowEnabled, snowI); snowAccum.draw(); }
@@ -929,7 +885,7 @@ async function loadSeason(key){
   // Floor alignment
   const floorPx = fx.height * (currentCfg.floorY/100);
   rainFX.setFloorY(floorPx); rainFX.setSplashes(splashesOn.checked);
-  snowAccum.setFloorY(floorPx); puddles.setFloorY(floorPx);
+  snowAccum.setFloorY(floorPx);
 
   // Spring-only flow flip for rain & petals
   const flip = (key==='spring') ? -1 : 1;
@@ -1050,7 +1006,6 @@ window.addEventListener('resize', ()=>{
     const floorPx = fx.height * (currentCfg.floorY/100);
     rainFX.setFloorY(floorPx);
     snowAccum.setFloorY(floorPx);
-    puddles.setFloorY(floorPx);
   }
 });
 
